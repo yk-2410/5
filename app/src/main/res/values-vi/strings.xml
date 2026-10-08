@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FCM Guard V2</string>
+    <string name="subtitle">Giữ kết nối FCM – Không lo mất thông báo</string>
+    <string name="label_key">Khóa cài đặt</string>
+    <string name="label_item">Mục bắt buộc</string>
+    <string name="save_configuration">Lưu cấu hình</string>
+    <string name="grant_modify">Cấp quyền sửa cài đặt hệ thống</string>
+    <string name="repair_now">Khắc phục ngay</string>
+    <string name="wake_fcm">Đánh thức FCM ngay</string>
+    <string name="open_fcm_diag">Mở chẩn đoán FCM</string>
+    <string name="status_title">Trạng thái</string>
+    <string name="current_value_title">Giá trị danh sách trắng hiện tại</string>
+    <string name="language">Ngôn ngữ</string>
+    <string name="follow_system">Theo hệ thống</string>
+    <string name="english">English</string>
+    <string name="simplified_chinese">简体中文</string>
+    <string name="default_key">MILLET_NO_RESTRICT_APP</string>
+    <string name="default_required_item">com.google.android.gms</string>
+
+    <string name="protection_title">Bảo vệ</string>
+    <string name="automatic_protection">Tự động bảo vệ</string>
+    <string name="automatic_protection_summary">Giám sát theo sự kiện chỉ đối với khóa danh sách trắng FCM. Kiểm tra dự phòng 30 phút một lần không đánh thức máy chỉ dùng làm bảo hiểm.</string>
+    <string name="persistent_notification">Thông báo thường trực</string>
+    <string name="persistent_notification_summary">Khuyến nghị BẬT để đạt độ tin cậy tối đa. TẮT để xóa thông báo đang chạy và dùng chế độ hoàn toàn chạy ngầm; tuy nhiên HyperOS có thể tắt dịch vụ dễ dàng hơn.</string>
+    <string name="actions_title">Công cụ</string>
+    <string name="advanced_title">Cấu hình nâng cao</string>
+
+    <string name="helper_text">Thiết kế tiết kiệm pin: dịch vụ không còn kiểm tra liên tục mỗi 30 giây, không theo dõi các cài đặt hệ thống không liên quan và chỉ gửi yêu cầu kết nối lại FCM sau khi thực sự khắc phục danh sách trắng.</string>
+    <string name="note_text">Khuyến nghị trên HyperOS: bật Tự khởi chạy (Autostart) và đặt chế độ pin thành Không hạn chế. Không cần Tùy chọn nhà phát triển, gỡ lỗi USB hay gỡ lỗi không dây.</string>
+
+    <string name="status_protected">Đã được bảo vệ</string>
+    <string name="status_ready">Sẵn sàng</string>
+    <string name="status_attention">Cần chú ý</string>
+    <string name="status_granted">Sửa cài đặt: Đã cấp quyền</string>
+    <string name="status_not_granted">Sửa cài đặt: Chưa cấp quyền</string>
+    <string name="status_enabled">Tự động bảo vệ: Đã bật</string>
+    <string name="status_disabled">Tự động bảo vệ: Đã tắt</string>
+    <string name="present_yes">Mục bắt buộc tồn tại: Có</string>
+    <string name="present_no">Mục bắt buộc tồn tại: Không</string>
+    <string name="notification_mode_foreground">Chế độ chạy ngầm: Dịch vụ tiền cảnh</string>
+    <string name="notification_mode_quiet">Chế độ chạy ngầm: Chạy ngầm im lặng</string>
+
+    <string name="saved">Đã lưu cấu hình</string>
+    <string name="repaired">Đã khắc phục / bảo vệ</string>
+    <string name="already_protected">Đã được bảo vệ sẵn</string>
+    <string name="missing_current">(thiếu)</string>
+    <string name="permission_missing">Chưa cấp quyền Sửa đổi cài đặt hệ thống</string>
+    <string name="service_started">Đã khởi động tự động bảo vệ</string>
+    <string name="service_stopped">Đã dừng tự động bảo vệ</string>
+    <string name="wake_sent">Đã gửi broadcast nhịp tim / kết nối lại</string>
+    <string name="diagnostics_unavailable">Không tìm thấy màn hình chẩn đoán FCM</string>
+    <string name="write_rejected">Hệ thống từ chối ghi</string>
+    <string name="write_failed">Ghi thất bại: %1$s</string>
+
+    <string name="notification_channel_name">Bảo vệ FCM Guard</string>
+    <string name="notification_channel_description">Thông báo ưu tiên thấp dùng để duy trì tự động bảo vệ FCM ổn định</string>
+    <string name="notification_active">Bảo vệ đang hoạt động · Theo sự kiện</string>
+    <string name="notification_repaired">Đã khắc phục danh sách trắng · FCM được bảo vệ</string>
+</resources>

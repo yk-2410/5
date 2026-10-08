@@ -1,0 +1,6 @@
+{
+  "name": "FCM Guard - Android APK Build & GitHub Actions",
+  "description": "GitHub Actions workflow for building Android debug APK with Gradle Wrapper and automated artifact upload.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
