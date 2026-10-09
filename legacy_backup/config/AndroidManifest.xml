@@ -5,11 +5,11 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!--
-      Package visibility needed by FCM Guard V2 to check GMS and key notification apps
+      Narrow package visibility only for the signals FCM Guard needs. This avoids
+      QUERY_ALL_PACKAGES while allowing best-effort discovery of FCM/GCM receivers
+      and the Google Play services diagnostics activity.
     -->
     <queries>
         <intent>
@@ -19,13 +19,7 @@
             <action android:name="com.google.android.c2dm.intent.RECEIVE" />
         </intent>
         <package android:name="com.google.android.gms" />
-        <package android:name="com.google.android.gsf" />
         <package android:name="com.miui.securitycenter" />
-        <package android:name="com.facebook.orca" />
-        <package android:name="com.zing.zalo" />
-        <package android:name="com.google.android.gm" />
-        <package android:name="com.VCB" />
-        <package android:name="com.vnpay.bidv" />
     </queries>
 
     <application
@@ -36,12 +30,19 @@
         android:localeConfig="@xml/locales_config"
         android:supportsRtl="true">
 
+        <!--
+          FCM Guard intentionally targets SDK 22 so WRITE_SETTINGS can modify Xiaomi's
+          private Settings.System whitelist. Old-target apps can otherwise be placed
+          into legacy aspect-ratio compatibility mode on tall modern displays, which
+          HyperOS shows as a large black area below the app. Explicitly opt the main
+          activity into modern tall/resizable layouts while keeping targetSdk 22.
+        -->
         <meta-data
             android:name="android.max_aspect"
             android:value="3.0" />
 
         <activity
-            android:name="com.youngknight.fcmguard.MainActivity"
+            android:name=".MainActivity"
             android:exported="true"
             android:resizeableActivity="true"
             android:maxAspectRatio="3.0"
@@ -53,12 +54,12 @@
         </activity>
 
         <service
-            android:name="com.youngknight.fcmguard.service.GuardService"
+            android:name=".GuardService"
             android:exported="false"
             android:stopWithTask="false" />
 
         <receiver
-            android:name="com.youngknight.fcmguard.receiver.BootReceiver"
+            android:name=".BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>

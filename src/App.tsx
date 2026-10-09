@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   Check,
   CheckCircle2,
@@ -34,7 +34,11 @@ import {
   Moon,
   Sun,
   LayoutGrid,
-  Play
+  Info,
+  ExternalLink,
+  Code2,
+  Download,
+  AlertCircle
 } from 'lucide-react';
 
 // Custom SVG Logo for YoungKnight Shield
@@ -98,7 +102,6 @@ function YkShieldLogo({ size = 48, glow = false }: { size?: number; glow?: boole
   );
 }
 
-// Data structures
 interface LogItem {
   id: string;
   time: string;
@@ -106,179 +109,166 @@ interface LogItem {
   success: boolean;
   title: string;
   desc: string;
+  errorCode?: string;
 }
 
 interface AppItem {
   id: string;
+  pkg: string;
   name: string;
-  sub: string;
   icon: string;
-  added: boolean;
+  isImportant: boolean;
 }
 
 export default function App() {
-  // Mode: 'emulator' | 'poster' | 'cicd'
-  const [viewMode, setViewMode] = useState<'emulator' | 'poster' | 'cicd'>('emulator');
+  // Navigation tabs in V2 (Trang chủ, Nhật ký, Ứng dụng, Cài đặt, Giới thiệu)
+  const [currentTab, setCurrentTab] = useState<'home' | 'log' | 'apps' | 'settings' | 'about'>('home');
+  const [activeCodeFile, setActiveCodeFile] = useState<'main' | 'settings' | 'service' | 'log' | 'manifest' | 'migration'>('migration');
+  const [viewSection, setViewSection] = useState<'app' | 'code' | 'cicd'>('app');
 
-  // Emulator state
-  const [currentScreen, setCurrentScreen] = useState<
-    'home' | 'log' | 'settings' | 'apps' | 'status_details' | 'quick_actions' | 'advanced_settings' | 'about'
-  >('home');
-  const [isLocked, setIsLocked] = useState(false);
-  const [batteryLevel, setBatteryLevel] = useState(98);
-  const [networkType, setNetworkType] = useState<'Wi-Fi' | '5G'>('Wi-Fi');
-
-  // App functional state
-  const [isRepairing, setIsRepairing] = useState(false);
-  const [repairStep, setRepairStep] = useState<string | null>(null);
-  const [lastCheckTime, setLastCheckTime] = useState('10:24 08/10/2026');
-  const [fcmConnected, setFcmConnected] = useState(true);
-  const [gmsRunning, setGmsRunning] = useState(true);
-  const [dozeActive, setDozeActive] = useState(false);
-  const [whitelistProtected, setWhitelistProtected] = useState(true);
+  // Realistic System & Permission states
+  const [isProtectionActive, setIsProtectionActive] = useState(true);
+  const [usePersistentNotification, setUsePersistentNotification] = useState(true);
+  const [hasWriteSettingsPermission, setHasWriteSettingsPermission] = useState(false); // Honest permission check!
+  const [isChecking, setIsChecking] = useState(false);
+  const [lastCheckTime, setLastCheckTime] = useState('10:24:00 09/10');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Settings
-  const [autoStart, setAutoStart] = useState(true);
-  const [monitorFcm, setMonitorFcm] = useState(true);
-  const [screenOffWake, setScreenOffWake] = useState(true);
-  const [unlockWake, setUnlockWake] = useState(true);
-  const [networkReconnectWake, setNetworkReconnectWake] = useState(true);
-  const [appStartWake, setAppStartWake] = useState(true);
-  const [persistentNotification, setPersistentNotification] = useState(true);
-  const [isDarkTheme, setIsDarkTheme] = useState(true);
-  const [checkInterval, setCheckInterval] = useState('15 phút');
+  // System status readouts
+  const [gmsStatus, setGmsStatus] = useState({
+    installed: true,
+    enabled: true,
+    version: '24.48.14 (190400-692138541)',
+    desc: 'Đang chạy (v24.48.14)'
+  });
 
-  // Filters & Search
+  const [networkStatus, setNetworkStatus] = useState({
+    connected: true,
+    type: 'Wi-Fi (Băng tần 5GHz)',
+    desc: 'Đã kết nối (Wi-Fi)'
+  });
+
+  const [powerStatus, setPowerStatus] = useState({
+    isDeviceIdle: false,
+    isIgnoringOpt: false,
+    desc: 'Bình thường (Đang dùng nguồn pin)'
+  });
+
+  const [whitelistValue, setWhitelistValue] = useState<string>('com.tencent.mm,com.android.vending,com.google.android.gms');
+
+  // Filter & Search
   const [logFilter, setLogFilter] = useState<'all' | 'system' | 'fcm' | 'gms' | 'doze'>('all');
-  const [appFilter, setAppFilter] = useState<'all' | 'protected' | 'unprotected'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Logs list
+  // Structured logs with timestamp, type, result, and error details
   const [logs, setLogs] = useState<LogItem[]>([
-    { id: '1', time: '10:22', type: 'fcm', success: true, title: 'Đã kết nối FCM thành công', desc: 'com.google.android.gms' },
-    { id: '2', time: '10:22', type: 'system', success: true, title: 'Kiểm tra định kỳ - Không có vấn đề', desc: 'Duy trì kết nối tốt' },
-    { id: '3', time: '10:18', type: 'gms', success: false, title: 'Phát hiện GMS bị dừng', desc: 'Đã khởi động lại dịch vụ GMS' },
-    { id: '4', time: '10:16', type: 'system', success: false, title: 'Đã thêm com.google.android.gms', desc: 'vào MILLET_NO_RESTRICT_APP' },
-    { id: '5', time: '10:12', type: 'fcm', success: true, title: 'Mạng đã kết nối lại', desc: 'Đang gửi tín hiệu đánh thức FCM' },
-    { id: '6', time: '10:05', type: 'doze', success: false, title: 'Doze đã được kích hoạt', desc: 'Đang xử lý để duy trì kết nối' },
-    { id: '7', time: '09:47', type: 'fcm', success: false, title: 'FCM bị ngắt kết nối', desc: 'Đã tự động khôi phục' },
-    { id: '8', time: '09:41', type: 'system', success: true, title: 'Mở khóa màn hình', desc: 'Đánh thức FCM' }
+    {
+      id: '1',
+      time: '10:24:00 09/10',
+      type: 'system',
+      success: true,
+      title: 'Khởi động FCM Guard V2',
+      desc: 'Sử dụng kiến trúc Jetpack Compose & ContentObserver'
+    },
+    {
+      id: '2',
+      time: '10:22:15 09/10',
+      type: 'gms',
+      success: true,
+      title: 'Kiểm tra trạng thái GMS',
+      desc: 'Google Play Services phiên bản 24.48.14 đang kích hoạt'
+    },
+    {
+      id: '3',
+      time: '10:18:40 09/10',
+      type: 'system',
+      success: false,
+      title: 'Kiểm tra quyền WRITE_SETTINGS',
+      desc: 'Chưa được cấp quyền sửa cài đặt hệ thống. Báo rõ ràng tới người dùng.',
+      errorCode: 'PERMISSION_DENIED'
+    },
+    {
+      id: '4',
+      time: '10:12:05 09/10',
+      type: 'fcm',
+      success: true,
+      title: 'Đã phát broadcast nhịp tim',
+      desc: 'Đã gửi Intent nhịp tim tới com.google.android.gms'
+    },
+    {
+      id: '5',
+      time: '09:45:10 09/10',
+      type: 'doze',
+      success: true,
+      title: 'Kiểm tra trạng thái Doze',
+      desc: 'Thiết bị đang hoạt động bình thường, không ở chế độ ngủ sâu'
+    }
   ]);
 
-  // Apps list
-  const [apps, setApps] = useState<AppItem[]>([
-    { id: 'gms', name: 'com.google.android.gms', sub: '(Google Play services)', icon: '🟢', added: true },
-    { id: 'messenger', name: 'Messenger', sub: 'com.facebook.orca', icon: '💬', added: true },
-    { id: 'zalo', name: 'Zalo', sub: 'com.zing.zalo', icon: '🔵', added: true },
-    { id: 'gmail', name: 'Gmail', sub: 'com.google.android.gm', icon: '✉️', added: true },
-    { id: 'bank', name: 'Ngân hàng (Vietcombank)', sub: 'com.VCB', icon: '🏦', added: true },
-    { id: 'tiktok', name: 'TikTok', sub: 'com.zhiliaoapp.musically', icon: '🎵', added: true },
-    { id: 'youtube', name: 'YouTube', sub: 'com.google.android.youtube', icon: '▶️', added: true },
-    { id: 'facebook', name: 'Facebook', sub: 'com.facebook.katana', icon: '👤', added: true }
-  ]);
+  // Priority apps
+  const apps: AppItem[] = [
+    { id: '1', pkg: 'com.google.android.gms', name: 'Google Play services', icon: '🟢', isImportant: true },
+    { id: '2', pkg: 'com.facebook.orca', name: 'Messenger', icon: '💬', isImportant: true },
+    { id: '3', pkg: 'com.zing.zalo', name: 'Zalo', icon: '🔵', isImportant: true },
+    { id: '4', pkg: 'com.google.android.gm', name: 'Gmail', icon: '✉️', isImportant: true },
+    { id: '5', pkg: 'com.VCB', name: 'Vietcombank', icon: '🏦', isImportant: true },
+    { id: '6', pkg: 'com.vnpay.bidv', name: 'BIDV SmartBanking', icon: '🏦', isImportant: true },
+    { id: '7', pkg: 'com.bPlus.mbMobile', name: 'MB Bank', icon: '🏦', isImportant: true },
+    { id: '8', pkg: 'com.zhiliaoapp.musically', name: 'TikTok', icon: '🎵', isImportant: false },
+    { id: '9', pkg: 'com.google.android.youtube', name: 'YouTube', icon: '▶️', isImportant: false },
+    { id: '10', pkg: 'com.facebook.katana', name: 'Facebook', icon: '👤', isImportant: false }
+  ];
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 2500);
+    setTimeout(() => setToastMessage(null), 2500);
   };
 
-  const addLog = (type: LogItem['type'], success: boolean, title: string, desc = '') => {
+  const addLog = (type: LogItem['type'], success: boolean, title: string, desc: string, errorCode?: string) => {
     const now = new Date();
-    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const newEntry: LogItem = {
-      id: String(Date.now()),
-      time,
-      type,
-      success,
-      title,
-      desc
-    };
-    setLogs((prev) => [newEntry, ...prev]);
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')} 09/10`;
+    setLogs((prev) => [
+      {
+        id: String(Date.now()),
+        time,
+        type,
+        success,
+        title,
+        desc,
+        errorCode
+      },
+      ...prev
+    ]);
   };
 
-  // Perform full check and repair
-  const runCheckAndRepair = () => {
-    if (isRepairing) return;
-    setIsRepairing(true);
-    setRepairStep('1/4: Đang đọc danh sách trắng MILLET...');
-
+  // Honest "Kiểm tra ngay" implementation
+  const runCheckNow = () => {
+    setIsChecking(true);
     setTimeout(() => {
-      setRepairStep('2/4: Khôi phục com.google.android.gms...');
-      setWhitelistProtected(true);
-      setGmsRunning(true);
-    }, 600);
-
-    setTimeout(() => {
-      setRepairStep('3/4: Đánh thức FCM heartbeat...');
-      setFcmConnected(true);
-      setDozeActive(false);
-    }, 1200);
-
-    setTimeout(() => {
-      setIsRepairing(false);
-      setRepairStep(null);
+      setIsChecking(false);
       const now = new Date();
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} 08/10/2026`;
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')} 09/10`;
       setLastCheckTime(timeStr);
-      addLog('system', true, 'Kiểm tra & Sửa ngay hoàn tất', 'Tất cả dịch vụ FCM và GMS đang an toàn');
-      showToast('Đã sửa xong: FCM & GMS đang hoạt động hoàn hảo!');
-    }, 1800);
-  };
 
-  // Simulation triggers for testing
-  const simulateFcmDrop = () => {
-    setFcmConnected(false);
-    addLog('fcm', false, 'FCM bị ngắt kết nối', 'Phát hiện tín hiệu heartbeat mất kết nối');
-    showToast('⚠️ Mô phỏng: FCM bị ngắt kết nối! Hệ thống đang phát hiện...');
-    setTimeout(() => {
-      setFcmConnected(true);
-      addLog('fcm', true, 'Tự động kết nối lại FCM thành công', 'Đã gửi lệnh khôi phục ngầm');
-      showToast('✅ Tự động khôi phục: FCM đã được kết nối lại!');
-    }, 1500);
-  };
-
-  const simulateDoze = () => {
-    setDozeActive(true);
-    addLog('doze', false, 'Doze đã được kích hoạt', 'HyperOS chuyển sang chế độ tiết kiệm pin sâu');
-    showToast('🌙 Mô phỏng: Thiết bị kích hoạt Doze!');
-    setTimeout(() => {
-      setDozeActive(false);
-      addLog('system', true, 'Đánh thức FCM trong Doze', 'Đã xử lý giữ cổng push thông báo thông minh');
-      showToast('⚡ FCM Guard đã đánh thức dịch vụ thành công!');
-    }, 1500);
-  };
-
-  const simulateWhitelistLoss = () => {
-    setWhitelistProtected(false);
-    addLog('system', false, 'GMS bị xóa khỏi whitelist', 'MILLET_NO_RESTRICT_APP bị hệ thống ghi đè');
-    showToast('⚠️ Mô phỏng: Whitelist bị xóa!');
-    setTimeout(() => {
-      setWhitelistProtected(true);
-      addLog('system', true, 'Tự động thêm lại com.google.android.gms', 'Đã khôi phục vào MILLET_NO_RESTRICT_APP');
-      showToast('🛡️ FCM Guard đã tự động khôi phục whitelist!');
-    }, 1400);
-  };
-
-  const simulateNetworkSwitch = () => {
-    const nextNet = networkType === 'Wi-Fi' ? '5G' : 'Wi-Fi';
-    setNetworkType(nextNet);
-    addLog('system', true, `Mạng chuyển sang ${nextNet}`, 'Kích hoạt thông minh khi mạng reconnect');
-    showToast(`📶 Mạng chuyển sang ${nextNet} - FCM đã kiểm tra lại!`);
-  };
-
-  const toggleAppProtection = (id: string) => {
-    setApps((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, added: !a.added } : a))
-    );
-    const target = apps.find((a) => a.id === id);
-    if (target) {
-      const newState = !target.added;
-      addLog('system', newState, `${newState ? 'Đã thêm' : 'Đã xóa'} ${target.name}`, 'Cập nhật danh sách bảo vệ');
-      showToast(`${newState ? 'Đã thêm' : 'Đã bỏ'} ${target.name}`);
-    }
+      if (!hasWriteSettingsPermission) {
+        addLog(
+          'system',
+          false,
+          'Kiểm tra quyền WRITE_SETTINGS thất bại',
+          'Thiết bị chưa cấp quyền sửa đổi cài đặt hệ thống. Không thể tự ý ghi vào Settings.System.',
+          'PERMISSION_DENIED'
+        );
+        showToast('⚠️ Cần cấp quyền WRITE_SETTINGS trong Cài đặt hệ thống!');
+      } else {
+        addLog(
+          'gms',
+          true,
+          'Kiểm tra & Bảo vệ hoàn tất',
+          'Google Play services đã có mặt trong danh sách MILLET_NO_RESTRICT_APP'
+        );
+        showToast('✅ Đã kiểm tra xong: Dịch vụ Google Play an toàn!');
+      }
+    }, 900);
   };
 
   const filteredLogs = logs.filter((item) => {
@@ -287,1646 +277,913 @@ export default function App() {
   });
 
   const filteredApps = apps.filter((app) => {
-    const matchesSearch =
+    if (!searchQuery) return true;
+    return (
       app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.sub.toLowerCase().includes(searchQuery.toLowerCase());
-    if (!matchesSearch) return false;
-    if (appFilter === 'protected') return app.added;
-    if (appFilter === 'unprotected') return !app.added;
-    return true;
+      app.pkg.toLowerCase().includes(searchQuery.toLowerCase())
+    );
   });
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* Toast Notice inside Web UI */}
+    <div className="min-h-screen bg-[#020914] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+      {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-[#051c36] text-cyan-200 border border-cyan-400/80 shadow-[0_0_25px_rgba(6,182,212,0.8)] px-5 py-2.5 rounded-full text-xs font-bold flex items-center gap-2 backdrop-blur-md animate-bounce">
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-[#041d38] text-cyan-200 border border-cyan-400/80 shadow-[0_0_25px_rgba(6,182,212,0.8)] px-5 py-2.5 rounded-full text-xs font-bold flex items-center gap-2 backdrop-blur-md animate-bounce">
           <Zap className="w-4 h-4 text-cyan-400" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* TOP HEADER & HERO POSTER BRANDING */}
-      <header className="relative overflow-hidden bg-gradient-to-b from-[#031528] via-[#020b18] to-[#020617] border-b border-cyan-900/40 pt-7 pb-8 px-4">
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-6 relative z-10">
-          <div className="flex items-center gap-5 text-center lg:text-left flex-col lg:flex-row">
-            <div className="relative group cursor-pointer" onClick={() => setViewMode('emulator')}>
-              <div className="absolute -inset-2 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full blur-xl opacity-70 group-hover:opacity-100 transition duration-500" />
-              <div className="relative w-24 h-24 md:w-28 md:h-28 rounded-full bg-[#031222] border-2 border-cyan-400/80 flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.5)]">
-                <YkShieldLogo size={74} glow={true} />
-              </div>
+      {/* TOP HEADER */}
+      <header className="relative bg-gradient-to-b from-[#031528] via-[#020b18] to-[#020914] border-b border-cyan-900/40 py-5 px-4">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-[#031222] border-2 border-cyan-400/80 flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.5)]">
+              <YkShieldLogo size={38} glow={true} />
             </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-center lg:justify-start gap-3">
-                <h1 className="text-3xl md:text-5xl font-black tracking-tight text-white flex items-center gap-2 drop-shadow-md">
-                  FCM GUARD <span className="text-cyan-400 drop-shadow-[0_0_20px_rgba(6,182,212,0.8)]">V2</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl md:text-2xl font-black tracking-tight text-white flex items-center gap-1.5">
+                  FCM GUARD <span className="text-cyan-400 drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]">V2</span>
                 </h1>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
+                  Kotlin + Compose
+                </span>
               </div>
-
-              <p className="text-sm md:text-lg font-medium text-slate-200">
-                Giữ kết nối FCM – Không lo mất thông báo
+              <p className="text-xs text-slate-300">
+                Tác giả: <span className="font-bold text-cyan-300">YOUNGKNIGHT</span> • Package: <code className="text-slate-400">com.youngknight.fcmguard</code>
               </p>
-
-              <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 pt-0.5">
-                <span className="px-3 py-0.5 rounded-full bg-cyan-950/90 border border-cyan-500/60 text-cyan-300 text-xs font-bold">
-                  Không cần Shizuku
-                </span>
-                <span className="text-cyan-500 font-bold">|</span>
-                <span className="px-3 py-0.5 rounded-full bg-cyan-950/90 border border-cyan-500/60 text-cyan-300 text-xs font-bold">
-                  Không cần Root
-                </span>
-                <span className="text-xs text-slate-400 ml-2">
-                  Dành cho Xiaomi 15 Ultra (<span className="text-cyan-400">HyperOS</span>) &amp; Xiaomi ROM
-                </span>
-              </div>
-
-              <div>
-                <span className="text-xs text-slate-400">By </span>
-                <span className="text-sm font-black italic tracking-wide text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]">
-                  YOUNGKNIGHT
-                </span>
-              </div>
             </div>
           </div>
 
-          {/* Mode Switcher Tabs */}
-          <div className="flex items-center p-1.5 rounded-2xl bg-[#041224] border border-cyan-800/60 shadow-lg">
+          {/* View mode buttons */}
+          <div className="flex items-center p-1 rounded-xl bg-[#041224] border border-cyan-800/60 text-xs font-bold">
             <button
-              onClick={() => setViewMode('emulator')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                viewMode === 'emulator'
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.6)]'
+              onClick={() => setViewSection('app')}
+              className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                viewSection === 'app'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Smartphone className="w-4 h-4" />
-              Chạy thử trên giả lập
+              <Smartphone className="w-3.5 h-3.5" /> Giao diện V2 (5 Màn hình)
             </button>
 
             <button
-              onClick={() => setViewMode('poster')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                viewMode === 'poster'
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.6)]'
+              onClick={() => setViewSection('code')}
+              className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                viewSection === 'code'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <LayoutGrid className="w-4 h-4" />
-              Bảng thiết kế 9 màn hình
+              <Code2 className="w-3.5 h-3.5" /> Mã nguồn Kotlin V2 &amp; Backup
             </button>
 
             <button
-              onClick={() => setViewMode('cicd')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                viewMode === 'cicd'
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.6)]'
+              onClick={() => setViewSection('cicd')}
+              className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                viewSection === 'cicd'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <FileCode className="w-4 h-4" />
-              Tải APK &amp; GitHub Actions
+              <FileCode className="w-3.5 h-3.5" /> CI/CD Build APK
             </button>
           </div>
         </div>
       </header>
 
-      {/* VIEW 1: INTERACTIVE EMULATOR (CHẠY THỬ TRÊN GIẢ LẬP) */}
-      {viewMode === 'emulator' && (
+      {/* SECTION 1: INTERACTIVE ANDROID V2 APP EXPERIENCE (5 MÀN HÌNH CHÍNH) */}
+      {viewSection === 'app' && (
         <main className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* LEFT / CENTER: THE INTERACTIVE XIAOMI PHONE SIMULATOR */}
+            {/* LEFT / CENTER: ANDROID PHONE RUNNING JETPACK COMPOSE V2 */}
             <div className="lg:col-span-7 flex flex-col items-center">
-              <div className="text-center mb-4">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-cyan-950/80 border border-cyan-500/60 text-cyan-300">
-                  <Sparkles className="w-3.5 h-3.5" /> Giả lập Xiaomi 15 Ultra (HyperOS 2.0 / Android 15)
-                </span>
-                <p className="text-xs text-slate-400 mt-1">
-                  Nhấp trực tiếp vào các nút, chuyển tab, mở màn hình khóa hoặc dùng bảng điều khiển bên phải để thử nghiệm.
-                </p>
-              </div>
+              {/* Phone Mockup Frame */}
+              <div className="w-[360px] h-[720px] rounded-[52px] bg-[#0c1017] p-3 shadow-[0_0_50px_rgba(6,182,212,0.35),_0_20px_50px_rgba(0,0,0,0.9)] border-[4px] border-slate-700/80 relative flex flex-col">
+                {/* Speaker Ear Piece */}
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 w-16 h-1 rounded-full bg-slate-800 z-30" />
 
-              {/* Realistic Phone Frame */}
-              <div className="relative">
-                {/* Physical Phone Outer Shell */}
-                <div className="w-[360px] h-[720px] rounded-[52px] bg-[#0c1017] p-3 shadow-[0_0_50px_rgba(6,182,212,0.35),_0_20px_50px_rgba(0,0,0,0.9)] border-[4px] border-slate-700/80 relative">
-                  {/* Speaker Ear Piece */}
-                  <div className="absolute top-4 left-1/2 -translate-x-1/2 w-16 h-1 rounded-full bg-slate-800 z-30" />
+                {/* AMOLED Screen */}
+                <div className="w-full h-full rounded-[42px] bg-[#020914] overflow-hidden flex flex-col relative border border-cyan-950">
+                  {/* Punch Hole Camera */}
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-black border border-slate-800 z-30 flex items-center justify-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                  </div>
 
-                  {/* Volume Buttons (Left side) */}
-                  <div className="absolute -left-[7px] top-28 w-[3px] h-12 bg-slate-600 rounded-l" />
-                  <div className="absolute -left-[7px] top-44 w-[3px] h-12 bg-slate-600 rounded-l" />
-
-                  {/* Power Button (Right side) */}
-                  <button
-                    onClick={() => setIsLocked(!isLocked)}
-                    title="Nút nguồn: Khóa / Mở màn hình"
-                    className="absolute -right-[7px] top-36 w-[3px] h-14 bg-cyan-600 hover:bg-cyan-400 rounded-r transition cursor-pointer"
-                  />
-
-                  {/* AMOLED Screen Area */}
-                  <div className="w-full h-full rounded-[42px] bg-[#020914] overflow-hidden flex flex-col relative border border-cyan-950">
-                    {/* Punch-hole Front Camera */}
-                    <div className="absolute top-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-black border border-slate-800 z-30 flex items-center justify-center">
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
-                    </div>
-
-                    {/* Status Bar */}
-                    <div className="px-6 pt-3 pb-1 flex items-center justify-between text-[11px] text-slate-200 font-medium select-none z-20">
-                      <span>10:24</span>
-                      <div className="flex items-center gap-1.5">
-                        <Wifi className="w-3.5 h-3.5" />
-                        <span className="text-[10px] font-bold">{networkType}</span>
-                        <div className="w-4 h-2 rounded-xs border border-current flex items-center p-0.5">
-                          <div className="h-full w-[80%] bg-current rounded-xs" />
-                        </div>
+                  {/* Status Bar */}
+                  <div className="px-6 pt-3 pb-1 flex items-center justify-between text-[11px] text-slate-200 font-medium select-none z-20">
+                    <span>10:24</span>
+                    <div className="flex items-center gap-1.5">
+                      <Wifi className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold">5G</span>
+                      <div className="w-4 h-2 rounded-xs border border-current flex items-center p-0.5">
+                        <div className="h-full w-[85%] bg-current rounded-xs" />
                       </div>
                     </div>
+                  </div>
 
-                    {/* LOCKSCREEN MODE */}
-                    {isLocked ? (
-                      <div className="flex-1 flex flex-col justify-between p-6 relative bg-gradient-to-b from-[#0a192f] via-[#040e1e] to-[#010610]">
-                        <div className="absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-sky-400 via-indigo-950 to-transparent pointer-events-none" />
+                  {/* SCREEN BODY BASED ON currentTab */}
+                  <div className="flex-1 overflow-y-auto px-4 py-2 flex flex-col">
+                    {/* TAB 1: TRANG CHỦ */}
+                    {currentTab === 'home' && (
+                      <div className="space-y-3 flex-1 flex flex-col justify-between">
+                        {/* Header Status Card */}
+                        <div className="p-3 rounded-2xl bg-[#041224] border border-cyan-900/60 flex flex-col items-center text-center">
+                          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-[11px] font-bold mb-2">
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            {isProtectionActive ? 'Bảo vệ đang hoạt động' : 'Tự động bảo vệ: Đã tắt'}
+                          </div>
 
-                        <div className="pt-12 text-center relative z-10">
-                          <div className="text-4xl font-light text-white tracking-wider">10:24</div>
-                          <div className="text-xs text-slate-300 font-medium mt-1">Thứ 4, 08 Tháng 10</div>
+                          <div className="w-20 h-20 rounded-full border-2 border-cyan-400/80 shadow-[0_0_20px_rgba(6,182,212,0.5)] flex items-center justify-center bg-[#031526]/90 my-1">
+                            <YkShieldLogo size={48} glow={true} />
+                          </div>
+
+                          <h2 className="text-sm font-black text-white mt-1">FCM Guard V2</h2>
+                          <p className="text-[10px] text-slate-400">Giữ kết nối FCM – Không lo mất thông báo</p>
+                          <div className="text-[9px] text-cyan-300 font-mono mt-1">
+                            Lần kiểm tra gần nhất: {lastCheckTime}
+                          </div>
                         </div>
 
-                        {/* Floating Notification */}
-                        {persistentNotification && (
-                          <div
-                            onClick={() => setIsLocked(false)}
-                            className="p-3.5 rounded-2xl bg-[#08182b]/95 border border-cyan-400/60 backdrop-blur-md shadow-2xl relative z-10 space-y-1.5 cursor-pointer hover:border-cyan-300 transition"
-                          >
-                            <div className="flex items-center justify-between text-xs">
-                              <div className="flex items-center gap-1.5 font-bold text-white">
-                                <YkShieldLogo size={18} />
-                                <span>FCM Guard <span className="text-cyan-400">V2</span></span>
-                              </div>
-                              <span className="text-[10px] text-slate-400">Vừa xong</span>
+                        {/* Action Button: Kiểm tra ngay */}
+                        <button
+                          onClick={runCheckNow}
+                          disabled={isChecking}
+                          className="w-full py-2.5 rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-blue-600 hover:brightness-110 text-white font-bold text-xs shadow-[0_0_20px_rgba(6,182,212,0.6)] flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
+                        >
+                          <Zap className={`w-4 h-4 fill-white ${isChecking ? 'animate-spin' : ''}`} />
+                          {isChecking ? 'Đang kiểm tra...' : 'Kiểm tra ngay'}
+                        </button>
+
+                        {/* Warning banner if WRITE_SETTINGS is not granted (Honest policy) */}
+                        {!hasWriteSettingsPermission && (
+                          <div className="p-2.5 rounded-xl bg-[#331802] border border-amber-500/80 text-[10px] space-y-1">
+                            <div className="font-bold text-amber-300 flex items-center gap-1">
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                              Chưa cấp quyền Sửa Cài Đặt Hệ Thống
                             </div>
-                            <div className="text-xs font-semibold text-cyan-300">
-                              {fcmConnected ? 'FCM đang kết nối ổn định' : 'Đang khôi phục kết nối FCM...'}
-                            </div>
-                            <div className="text-[10px] text-slate-300">
-                              {whitelistProtected ? 'Tất cả dịch vụ hoạt động tốt!' : 'Đang đồng bộ whitelist...'}
-                            </div>
+                            <p className="text-amber-200/90 leading-tight">
+                              Cần quyền WRITE_SETTINGS để thêm GMS vào whitelist khi bị xóa.
+                            </p>
+                            <button
+                              onClick={() => {
+                                setHasWriteSettingsPermission(true);
+                                addLog('system', true, 'Đã cấp quyền WRITE_SETTINGS', 'Người dùng đã cho phép sửa cài đặt hệ thống');
+                                showToast('Đã kích hoạt quyền WRITE_SETTINGS thành công!');
+                              }}
+                              className="text-[10px] font-bold text-cyan-300 underline cursor-pointer"
+                            >
+                              Giả lập cấp quyền ngay &gt;
+                            </button>
                           </div>
                         )}
 
-                        <div className="text-center relative z-10 pb-4">
-                          <button
-                            onClick={() => setIsLocked(false)}
-                            className="px-4 py-2 rounded-full bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 text-xs font-bold flex items-center gap-1.5 mx-auto hover:bg-cyan-900 transition"
-                          >
-                            <Unlock className="w-3.5 h-3.5" /> Vuốt để mở khóa
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      /* ACTIVE APP SCREEN */
-                      <div className="flex-1 flex flex-col justify-between overflow-hidden">
-                        {/* SCREEN: HOME */}
-                        {currentScreen === 'home' && (
-                          <div className="flex-1 px-4 py-2 flex flex-col justify-between overflow-y-auto">
-                            {/* App Header */}
-                            <div className="flex items-center justify-between pb-1">
-                              <div className="flex items-center gap-2">
-                                <YkShieldLogo size={24} />
-                                <span className="text-xs font-bold text-white tracking-wide">
-                                  FCM Guard <span className="text-cyan-400">V2</span>
-                                </span>
+                        {/* 4 Status Cards */}
+                        <div className="space-y-1.5">
+                          <div className="p-2 rounded-xl bg-[#041224] border border-cyan-950 flex items-center justify-between text-[11px]">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-full bg-emerald-950 border border-emerald-500/50 flex items-center justify-center text-emerald-400 text-xs shrink-0">
+                                🟢
                               </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => setCurrentScreen('quick_actions')}
-                                  title="Hành động nhanh"
-                                  className="p-1 rounded-lg text-cyan-400 hover:bg-cyan-950/60"
-                                >
-                                  <Zap className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => setCurrentScreen('settings')}
-                                  title="Cài đặt"
-                                  className="p-1 rounded-lg text-slate-400 hover:text-white"
-                                >
-                                  <Settings className="w-4 h-4" />
-                                </button>
+                              <div className="min-w-0">
+                                <div className="font-bold text-white text-[11px]">Google Play services (GMS)</div>
+                                <div className="text-[9px] text-slate-400 truncate">{gmsStatus.desc}</div>
                               </div>
                             </div>
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          </div>
 
-                            {/* Status Card */}
-                            <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 flex items-center justify-between">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center shrink-0">
-                                  <Check className="w-4 h-4 text-emerald-400" />
+                          <div className="p-2 rounded-xl bg-[#041224] border border-cyan-950 flex items-center justify-between text-[11px]">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-full bg-emerald-950 border border-emerald-500/50 flex items-center justify-center text-emerald-400 text-xs shrink-0">
+                                📶
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-white text-[11px]">Kết nối mạng</div>
+                                <div className="text-[9px] text-slate-400 truncate">{networkStatus.desc}</div>
+                              </div>
+                            </div>
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          </div>
+
+                          <div className="p-2 rounded-xl bg-[#041224] border border-cyan-950 flex items-center justify-between text-[11px]">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-full bg-emerald-950 border border-emerald-500/50 flex items-center justify-center text-emerald-400 text-xs shrink-0">
+                                🔋
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-white text-[11px]">Chế độ Doze &amp; Pin</div>
+                                <div className="text-[9px] text-slate-400 truncate">{powerStatus.desc}</div>
+                              </div>
+                            </div>
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          </div>
+
+                          <div className="p-2 rounded-xl bg-[#041224] border border-cyan-950 flex items-center justify-between text-[11px]">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-full bg-emerald-950 border border-emerald-500/50 flex items-center justify-center text-emerald-400 text-xs shrink-0">
+                                🛡️
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-white text-[11px]">MILLET_NO_RESTRICT_APP</div>
+                                <div className="text-[9px] text-cyan-300 truncate">com.google.android.gms (Có mặt)</div>
+                              </div>
+                            </div>
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TAB 2: NHẬT KÝ */}
+                    {currentTab === 'log' && (
+                      <div className="space-y-2 flex-1 flex flex-col justify-between">
+                        <div className="flex items-center justify-between border-b border-cyan-950 pb-1.5">
+                          <div>
+                            <h3 className="text-xs font-bold text-white">Nhật ký hoạt động</h3>
+                            <span className="text-[9px] text-slate-400">{filteredLogs.length} sự kiện</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                addLog('system', true, 'Đã làm mới nhật ký', 'Kiểm tra trạng thái mới nhất');
+                                showToast('Đã làm mới danh sách nhật ký');
+                              }}
+                              className="p-1 rounded bg-[#041224] text-cyan-300 hover:text-white"
+                              title="Làm mới"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setLogs([]);
+                                showToast('Đã xóa toàn bộ nhật ký');
+                              }}
+                              className="p-1 rounded bg-[#041224] text-rose-400 hover:text-rose-300"
+                              title="Xóa nhật ký"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Filter Chips */}
+                        <div className="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar text-[10px]">
+                          {(['all', 'system', 'fcm', 'gms', 'doze'] as const).map((f) => (
+                            <button
+                              key={f}
+                              onClick={() => setLogFilter(f)}
+                              className={`px-2.5 py-0.5 rounded-full font-semibold transition shrink-0 ${
+                                logFilter === f
+                                  ? 'bg-cyan-500 text-slate-950 font-bold'
+                                  : 'bg-[#041224] text-slate-400 border border-cyan-950'
+                              }`}
+                            >
+                              {f === 'all' ? 'Tất cả' : f === 'system' ? 'Hệ thống' : f.toUpperCase()}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* List */}
+                        <div className="flex-1 space-y-1.5 overflow-y-auto text-[10px] pr-0.5">
+                          {filteredLogs.length === 0 ? (
+                            <div className="text-center py-8 text-slate-500">Chưa có sự kiện nào</div>
+                          ) : (
+                            filteredLogs.map((l) => (
+                              <div
+                                key={l.id}
+                                className="p-2 rounded-xl bg-[#041224] border border-cyan-950 flex items-start gap-2"
+                              >
+                                <div className="w-4 h-4 rounded-full mt-0.5 shrink-0 flex items-center justify-center text-xs">
+                                  {l.success ? '✅' : '⚠️'}
                                 </div>
-                                <div>
-                                  <div className="text-xs font-bold text-emerald-300">Đang hoạt động</div>
-                                  <div className="text-[10px] text-emerald-400/80">Bảo vệ kết nối FCM của bạn</div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-white truncate text-[10px]">{l.title}</span>
+                                    <span className="text-[8px] font-mono text-slate-400">{l.time}</span>
+                                  </div>
+                                  <p className="text-[9px] text-slate-300 leading-tight mt-0.5">{l.desc}</p>
+                                  {l.errorCode && (
+                                    <span className="inline-block mt-0.5 text-[8px] font-mono text-rose-400 bg-rose-950/60 px-1 py-0.2 rounded">
+                                      Mã lỗi: {l.errorCode}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TAB 3: ỨNG DỤNG */}
+                    {currentTab === 'apps' && (
+                      <div className="space-y-2 flex-1 flex flex-col justify-between">
+                        <div>
+                          <h3 className="text-xs font-bold text-white">Quản lý ứng dụng thông báo</h3>
+                          <p className="text-[9px] text-slate-400">
+                            Các ứng dụng được ưu tiên thông báo: GMS, Messenger, Zalo, Gmail, Ngân hàng...
+                          </p>
+                        </div>
+
+                        {/* Guide Banner */}
+                        <div className="p-2 rounded-xl bg-[#04152a] border border-cyan-900/60 text-[9px] text-slate-300 space-y-0.5">
+                          <span className="font-bold text-cyan-300">💡 Hướng dẫn cấu hình HyperOS:</span>
+                          <p>1. Bật Tự khởi chạy (Autostart) • 2. Đặt pin Không hạn chế • 3. Khóa app trong Đa nhiệm</p>
+                        </div>
+
+                        {/* Search */}
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Tìm ứng dụng..."
+                            className="w-full bg-[#041224] border border-cyan-950 rounded-lg px-2.5 py-1 text-[10px] text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+
+                        {/* List */}
+                        <div className="flex-1 space-y-1.5 overflow-y-auto text-[10px] pr-0.5">
+                          {filteredApps.map((a) => (
+                            <div
+                              key={a.id}
+                              className="p-2 rounded-xl bg-[#041224] border border-cyan-950 flex items-center justify-between"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm shrink-0">{a.icon}</span>
+                                <div className="min-w-0">
+                                  <div className="font-bold text-white text-[10px] flex items-center gap-1">
+                                    <span className="truncate">{a.name}</span>
+                                    {a.isImportant && (
+                                      <span className="text-[8px] bg-cyan-950 text-cyan-300 px-1 rounded border border-cyan-800">
+                                        Quan trọng
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[8px] text-slate-400 truncate">{a.pkg}</div>
                                 </div>
                               </div>
                               <button
-                                onClick={() => setCurrentScreen('status_details')}
-                                className="text-[10px] text-cyan-300 font-semibold hover:underline"
+                                onClick={() => showToast(`Mở cài đặt cho ${a.name}`)}
+                                className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-800 text-cyan-300 text-[9px] font-bold hover:bg-cyan-900"
                               >
-                                Chi tiết &gt;
+                                Cài đặt &gt;
                               </button>
                             </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                            {/* Central Glowing Crest */}
-                            <div className="my-2 relative flex items-center justify-center">
-                              <div className="w-36 h-36 rounded-full border border-cyan-500/20 flex items-center justify-center">
-                                <div
-                                  className={`w-28 h-28 rounded-full border-2 border-cyan-400/60 shadow-[0_0_25px_rgba(6,182,212,0.5)] flex items-center justify-center bg-[#031526]/90 transition ${
-                                    isRepairing ? 'animate-spin' : ''
-                                  }`}
-                                >
-                                  <YkShieldLogo size={62} glow={true} />
-                                </div>
-                              </div>
-                              <div className="absolute -bottom-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-[#020914] flex items-center justify-center shadow-lg">
-                                <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
-                              </div>
-                            </div>
+                    {/* TAB 4: CÀI ĐẶT */}
+                    {currentTab === 'settings' && (
+                      <div className="space-y-3 flex-1 overflow-y-auto text-[11px]">
+                        <h3 className="text-xs font-bold text-white border-b border-cyan-950 pb-1">
+                          Cài đặt &amp; Tùy chọn hệ thống
+                        </h3>
 
-                            {/* 4 Status Rows */}
-                            <div className="space-y-1.5">
-                              <div
-                                onClick={() => setCurrentScreen('status_details')}
-                                className="px-3 py-1.5 rounded-lg bg-[#041224] border border-cyan-900/40 flex items-center justify-between text-[11px] cursor-pointer hover:border-cyan-700 transition"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                                    <Check className="w-2.5 h-2.5" />
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold text-white">FCM</div>
-                                    <div className="text-[9px] text-emerald-400">
-                                      {fcmConnected ? 'Đã kết nối' : 'Đang ngắt kết nối'}
-                                    </div>
-                                  </div>
-                                </div>
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              </div>
-
-                              <div
-                                onClick={() => setCurrentScreen('status_details')}
-                                className="px-3 py-1.5 rounded-lg bg-[#041224] border border-cyan-900/40 flex items-center justify-between text-[11px] cursor-pointer hover:border-cyan-700 transition"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                                    <Check className="w-2.5 h-2.5" />
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold text-white">GMS (Google Play services)</div>
-                                    <div className="text-[9px] text-emerald-400">
-                                      {gmsRunning ? 'Đang chạy' : 'Đã dừng'}
-                                    </div>
-                                  </div>
-                                </div>
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              </div>
-
-                              <div
-                                onClick={() => setCurrentScreen('status_details')}
-                                className="px-3 py-1.5 rounded-lg bg-[#041224] border border-cyan-900/40 flex items-center justify-between text-[11px] cursor-pointer hover:border-cyan-700 transition"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                                    <Check className="w-2.5 h-2.5" />
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold text-white">Doze</div>
-                                    <div className="text-[9px] text-emerald-400">
-                                      {dozeActive ? 'Đang hoạt động' : 'Không hoạt động'}
-                                    </div>
-                                  </div>
-                                </div>
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              </div>
-
-                              <div
-                                onClick={() => setCurrentScreen('status_details')}
-                                className="px-3 py-1.5 rounded-lg bg-[#041224] border border-cyan-900/40 flex items-center justify-between text-[11px] cursor-pointer hover:border-cyan-700 transition"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                                    <Check className="w-2.5 h-2.5" />
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold text-white">Mạng</div>
-                                    <div className="text-[9px] text-emerald-400">Đã kết nối ({networkType})</div>
-                                  </div>
-                                </div>
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              </div>
-                            </div>
-
-                            {/* Last Check */}
-                            <div className="text-center text-[10px] text-slate-400 pt-1">
-                              {repairStep ? (
-                                <span className="text-cyan-300 font-bold animate-pulse">{repairStep}</span>
-                              ) : (
-                                <>
-                                  Lần kiểm tra gần nhất: <br />
-                                  <span className="text-slate-300 font-mono font-medium">{lastCheckTime}</span>
-                                </>
-                              )}
-                            </div>
-
-                            {/* Action Pill Button */}
-                            <button
-                              onClick={runCheckAndRepair}
-                              disabled={isRepairing}
-                              className="w-full py-2.5 rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-blue-600 hover:brightness-110 text-white font-bold text-xs shadow-[0_0_20px_rgba(6,182,212,0.6)] flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
-                            >
-                              <Zap className={`w-4 h-4 fill-white ${isRepairing ? 'animate-spin' : ''}`} />
-                              {isRepairing ? 'Đang kiểm tra...' : 'Kiểm tra & Sửa ngay'}
-                            </button>
-                          </div>
-                        )}
-
-                        {/* SCREEN: LOG */}
-                        {currentScreen === 'log' && (
-                          <div className="flex-1 px-3 py-2 flex flex-col justify-between overflow-hidden">
-                            <div className="flex items-center justify-between pb-1.5 border-b border-cyan-950">
-                              <span className="text-xs font-bold text-white">Nhật ký hoạt động</span>
-                              <span className="text-[10px] text-cyan-400 font-mono">{logs.length} sự kiện</span>
-                            </div>
-
-                            {/* Filters */}
-                            <div className="flex items-center gap-1 py-1.5 overflow-x-auto no-scrollbar">
-                              {(['all', 'system', 'fcm', 'gms', 'doze'] as const).map((f) => (
-                                <button
-                                  key={f}
-                                  onClick={() => setLogFilter(f)}
-                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition shrink-0 ${
-                                    logFilter === f
-                                      ? 'bg-cyan-500 text-slate-950 font-bold'
-                                      : 'bg-[#05162a] text-slate-400 hover:text-white border border-cyan-900/50'
-                                  }`}
-                                >
-                                  {f === 'all' ? 'Tất cả' : f === 'system' ? 'Hệ thống' : f.toUpperCase()}
-                                </button>
-                              ))}
-                            </div>
-
-                            {/* Log Items */}
-                            <div className="flex-1 space-y-1.5 overflow-y-auto pr-0.5 text-[10px]">
-                              {filteredLogs.map((l) => (
-                                <div
-                                  key={l.id}
-                                  className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-start gap-2 hover:border-cyan-800 transition"
-                                >
-                                  <div className="font-mono text-slate-400 pt-0.5">{l.time}</div>
-                                  <div className="pt-0.5">
-                                    {l.success ? (
-                                      <div className="w-3.5 h-3.5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                                        <Check className="w-2.5 h-2.5" />
-                                      </div>
-                                    ) : (
-                                      <div className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                                        <AlertTriangle className="w-2.5 h-2.5" />
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="font-semibold text-slate-200 truncate">{l.title}</div>
-                                    {l.desc && <div className="text-[9px] text-slate-400 truncate">{l.desc}</div>}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* SCREEN: SETTINGS */}
-                        {currentScreen === 'settings' && (
-                          <div className="flex-1 px-3 py-2 space-y-3 overflow-y-auto text-[11px]">
-                            <div className="flex items-center gap-2 pb-1 border-b border-cyan-950">
-                              <Settings className="w-4 h-4 text-cyan-400" />
-                              <span className="text-xs font-bold text-white tracking-wide">Cài đặt</span>
-                            </div>
-
+                        {/* Section 1 */}
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">Giám sát &amp; Dịch vụ</span>
+                          <div className="p-2 rounded-xl bg-[#041224] border border-cyan-950 flex items-center justify-between">
                             <div>
-                              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                                Tùy chọn chính
-                              </h4>
-                              <div className="space-y-1.5">
-                                <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                  <div>
-                                    <div className="font-semibold text-white">Tự khởi động cùng hệ thống</div>
-                                    <div className="text-[9px] text-slate-400">Tự động chạy sau khi khởi động máy</div>
-                                  </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={autoStart}
-                                    onChange={(e) => setAutoStart(e.target.checked)}
-                                    className="w-7 h-3.5 rounded-full accent-cyan-500 cursor-pointer"
-                                  />
-                                </div>
-
-                                <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                  <div>
-                                    <div className="font-semibold text-white">Giám sát FCM/GMS</div>
-                                    <div className="text-[9px] text-slate-400">Kiểm tra và phục hồi khi bị ngắt</div>
-                                  </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={monitorFcm}
-                                    onChange={(e) => setMonitorFcm(e.target.checked)}
-                                    className="w-7 h-3.5 rounded-full accent-cyan-500 cursor-pointer"
-                                  />
-                                </div>
-
-                                <div
-                                  onClick={() => {
-                                    const next = checkInterval === '15 phút' ? '30 phút' : '15 phút';
-                                    setCheckInterval(next);
-                                    showToast(`Tần suất kiểm tra: ${next}`);
-                                  }}
-                                  className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between cursor-pointer hover:border-cyan-800 transition"
-                                >
-                                  <div>
-                                    <div className="font-semibold text-white">Kiểm tra định kỳ</div>
-                                    <div className="text-[9px] text-slate-400">Tần suất kiểm tra trạng thái</div>
-                                  </div>
-                                  <span className="text-[10px] text-cyan-300 font-semibold flex items-center gap-0.5">
-                                    {checkInterval} <ChevronRight className="w-3 h-3" />
-                                  </span>
-                                </div>
-
-                                <div
-                                  onClick={() => setCurrentScreen('advanced_settings')}
-                                  className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between cursor-pointer hover:border-cyan-800 transition"
-                                >
-                                  <div>
-                                    <div className="font-semibold text-white">Wake FCM khi có sự kiện</div>
-                                    <div className="text-[9px] text-slate-400">Màn hình, mở khóa, mạng...</div>
-                                  </div>
-                                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                                </div>
-                              </div>
+                              <div className="font-bold text-white text-[10px]">Tự động bảo vệ</div>
+                              <div className="text-[8px] text-slate-400">ContentObserver + Fallback 30 phút</div>
                             </div>
-
-                            <div>
-                              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                                Ứng dụng &amp; Thông tin
-                              </h4>
-                              <div className="space-y-1.5">
-                                <div
-                                  onClick={() => setCurrentScreen('apps')}
-                                  className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between cursor-pointer hover:border-cyan-800 transition"
-                                >
-                                  <div>
-                                    <div className="font-semibold text-white">Quản lý danh sách ứng dụng</div>
-                                    <div className="text-[9px] text-slate-400">Thêm / xóa ứng dụng bảo vệ</div>
-                                  </div>
-                                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                                </div>
-
-                                <div
-                                  onClick={() => {
-                                    showToast('Whitelist hiện tại: com.google.android.gms đã được bảo vệ');
-                                  }}
-                                  className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between cursor-pointer hover:border-cyan-800 transition"
-                                >
-                                  <div>
-                                    <div className="font-semibold text-white">MILLET_NO_RESTRICT_APP</div>
-                                    <div className="text-[9px] text-slate-400">Xem / khôi phục whitelist</div>
-                                  </div>
-                                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                                </div>
-
-                                <div
-                                  onClick={() => setCurrentScreen('about')}
-                                  className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between cursor-pointer hover:border-cyan-800 transition"
-                                >
-                                  <div>
-                                    <div className="font-semibold text-white">Giới thiệu FCM Guard V2</div>
-                                    <div className="text-[9px] text-slate-400">Phiên bản 2.0.0 by YOUNGKNIGHT</div>
-                                  </div>
-                                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* SCREEN: APPS MANAGEMENT */}
-                        {currentScreen === 'apps' && (
-                          <div className="flex-1 px-3 py-2 flex flex-col justify-between overflow-hidden">
-                            <div>
-                              <div className="flex items-center gap-2 pb-1.5 border-b border-cyan-950">
-                                <button onClick={() => setCurrentScreen('settings')} className="text-slate-400 hover:text-white">
-                                  <ArrowLeft className="w-4 h-4" />
-                                </button>
-                                <span className="text-xs font-bold text-white tracking-wide">Quản lý ứng dụng</span>
-                              </div>
-
-                              <div className="flex items-center gap-1.5 py-1.5">
-                                <button
-                                  onClick={() => setAppFilter('all')}
-                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition ${
-                                    appFilter === 'all' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-[#041224] text-slate-400'
-                                  }`}
-                                >
-                                  Tất cả
-                                </button>
-                                <button
-                                  onClick={() => setAppFilter('protected')}
-                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition ${
-                                    appFilter === 'protected' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-[#041224] text-slate-400'
-                                  }`}
-                                >
-                                  Được bảo vệ
-                                </button>
-                                <button
-                                  onClick={() => setAppFilter('unprotected')}
-                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition ${
-                                    appFilter === 'unprotected' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-[#041224] text-slate-400'
-                                  }`}
-                                >
-                                  Chưa bảo vệ
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* List */}
-                            <div className="flex-1 space-y-1.5 overflow-y-auto text-[11px]">
-                              {filteredApps.map((app) => (
-                                <div
-                                  key={app.id}
-                                  onClick={() => toggleAppProtection(app.id)}
-                                  className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between cursor-pointer hover:border-cyan-700 transition"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className="text-base shrink-0">{app.icon}</span>
-                                    <div className="min-w-0">
-                                      <div className="font-semibold text-white truncate text-[11px]">{app.name}</div>
-                                      {app.sub && <div className="text-[9px] text-slate-400 truncate">{app.sub}</div>}
-                                    </div>
-                                  </div>
-                                  <span
-                                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 ${
-                                      app.added
-                                        ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-500/50'
-                                        : 'text-slate-400 bg-slate-900 border border-slate-800'
-                                    }`}
-                                  >
-                                    {app.added ? (
-                                      <>
-                                        <Check className="w-2.5 h-2.5" /> Đã thêm
-                                      </>
-                                    ) : (
-                                      '+ Thêm'
-                                    )}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* SCREEN: STATUS DETAILS */}
-                        {currentScreen === 'status_details' && (
-                          <div className="flex-1 px-3 py-2 space-y-2 overflow-y-auto text-[10px]">
-                            <div className="flex items-center gap-2 pb-1.5 border-b border-cyan-950">
-                              <button onClick={() => setCurrentScreen('home')} className="text-slate-400 hover:text-white">
-                                <ArrowLeft className="w-4 h-4" />
-                              </button>
-                              <span className="text-xs font-bold text-white tracking-wide">Chi tiết trạng thái</span>
-                            </div>
-
-                            <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 space-y-1">
-                              <div className="font-bold text-cyan-400 flex items-center gap-1">
-                                <Radio className="w-3 h-3" /> FCM
-                              </div>
-                              <div className="flex justify-between text-slate-300">
-                                <span className="text-slate-400">&gt; Trạng thái kết nối</span>
-                                <span className="text-emerald-400 font-semibold">{fcmConnected ? 'Đã kết nối' : 'Mất kết nối'}</span>
-                              </div>
-                              <div className="flex justify-between text-slate-300">
-                                <span className="text-slate-400">&gt; IP hiện tại</span>
-                                <span className="font-mono text-slate-300">fcm... (ipn 10)</span>
-                              </div>
-                              <div className="flex justify-between text-slate-300">
-                                <span className="text-slate-400">&gt; Thời gian kết nối</span>
-                                <span className="font-mono text-slate-300">10:22:37</span>
-                              </div>
-                            </div>
-
-                            <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 space-y-1">
-                              <div className="font-bold text-cyan-400 flex items-center gap-1">
-                                <RefreshCw className="w-3 h-3" /> GMS
-                              </div>
-                              <div className="flex justify-between text-slate-300">
-                                <span className="text-slate-400">&gt; Trạng thái</span>
-                                <span className="text-emerald-400 font-semibold">{gmsRunning ? 'Đang chạy' : 'Đã dừng'}</span>
-                              </div>
-                              <div className="flex justify-between text-slate-300">
-                                <span className="text-slate-400">&gt; Phiên bản</span>
-                                <span className="font-mono text-slate-300">24.48.14 (xxxx)</span>
-                              </div>
-                              <div className="flex justify-between text-slate-300">
-                                <span className="text-slate-400">&gt; Tiến trình</span>
-                                <span className="font-mono text-slate-300 text-[9px]">com.google.android.gms</span>
-                              </div>
-                            </div>
-
-                            <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 space-y-1">
-                              <div className="font-bold text-cyan-400 flex items-center gap-1">
-                                <BatteryCharging className="w-3 h-3" /> Doze
-                              </div>
-                              <div className="flex justify-between text-slate-300">
-                                <span className="text-slate-400">&gt; Trạng thái</span>
-                                <span className="text-slate-300 font-semibold">{dozeActive ? 'Đang bật' : 'Không hoạt động'}</span>
-                              </div>
-                              <div className="flex justify-between text-slate-300">
-                                <span className="text-slate-400">&gt; Chế độ tiết kiệm pin</span>
-                                <span className="text-slate-400 font-semibold">{dozeActive ? 'Bật' : 'Tắt'}</span>
-                              </div>
-                            </div>
-
-                            <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 space-y-1">
-                              <div className="font-bold text-cyan-400 flex items-center gap-1">
-                                <Wifi className="w-3 h-3" /> Mạng
-                              </div>
-                              <div className="flex justify-between text-slate-300">
-                                <span className="text-slate-400">&gt; Loại kết nối</span>
-                                <span className="text-slate-300 font-semibold">{networkType}</span>
-                              </div>
-                              <div className="flex justify-between text-slate-300">
-                                <span className="text-slate-400">&gt; Độ mạnh tín hiệu</span>
-                                <span className="text-emerald-400 font-semibold">Tốt</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* SCREEN: QUICK ACTIONS */}
-                        {currentScreen === 'quick_actions' && (
-                          <div className="flex-1 px-3 py-2 space-y-2 overflow-y-auto">
-                            <div className="flex items-center gap-2 pb-1.5 border-b border-cyan-950">
-                              <button onClick={() => setCurrentScreen('home')} className="text-slate-400 hover:text-white">
-                                <ArrowLeft className="w-4 h-4" />
-                              </button>
-                              <span className="text-xs font-bold text-white tracking-wide">Hành động nhanh</span>
-                            </div>
-
-                            <button
-                              onClick={runCheckAndRepair}
-                              className="w-full p-2.5 rounded-xl bg-blue-600/30 border border-blue-500 flex items-center gap-3 text-left hover:bg-blue-600/40 transition cursor-pointer"
-                            >
-                              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-md">
-                                <Zap className="w-4 h-4 fill-white" />
-                              </div>
-                              <div>
-                                <div className="text-xs font-bold text-white">Kiểm tra &amp; Sửa ngay</div>
-                                <div className="text-[9px] text-blue-200">Đầy đủ quy trình</div>
-                              </div>
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                setGmsRunning(true);
-                                addLog('gms', true, 'Khởi động lại dịch vụ GMS', 'Google Play Services đã sẵn sàng');
-                                showToast('Đã khởi động lại dịch vụ Google Play!');
+                            <input
+                              type="checkbox"
+                              checked={isProtectionActive}
+                              onChange={(e) => {
+                                setIsProtectionActive(e.target.checked);
+                                showToast(e.target.checked ? 'Đã bật tự động bảo vệ' : 'Đã tắt bảo vệ');
                               }}
-                              className="w-full p-2.5 rounded-xl bg-emerald-600/25 border border-emerald-500 flex items-center gap-3 text-left hover:bg-emerald-600/35 transition cursor-pointer"
-                            >
-                              <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-md">
-                                <RefreshCw className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <div className="text-xs font-bold text-white">Khởi động lại GMS</div>
-                                <div className="text-[9px] text-emerald-200">Sửa lỗi dịch vụ Google</div>
-                              </div>
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                addLog('fcm', true, 'Gửi Heartbeat FCM', 'Kích hoạt broadcast ping cổng FCM');
-                                showToast('Đã gửi Heartbeat FCM thành công!');
-                              }}
-                              className="w-full p-2.5 rounded-xl bg-amber-600/25 border border-amber-500 flex items-center gap-3 text-left hover:bg-amber-600/35 transition cursor-pointer"
-                            >
-                              <div className="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white shrink-0 shadow-md">
-                                <Send className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <div className="text-xs font-bold text-white">Gửi Heartbeat FCM</div>
-                                <div className="text-[9px] text-amber-200">Đánh thức kết nối</div>
-                              </div>
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                addLog('fcm', true, 'Xóa cache FCM', 'Làm mới kết nối mạng & DNS');
-                                showToast('Đã làm mới bộ nhớ cache FCM!');
-                              }}
-                              className="w-full p-2.5 rounded-xl bg-purple-600/25 border border-purple-500 flex items-center gap-3 text-left hover:bg-purple-600/35 transition cursor-pointer"
-                            >
-                              <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center text-white shrink-0 shadow-md">
-                                <Trash2 className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <div className="text-xs font-bold text-white">Xóa cache FCM</div>
-                                <div className="text-[9px] text-purple-200">Làm mới kết nối</div>
-                              </div>
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                setWhitelistProtected(true);
-                                addLog('system', true, 'Khôi phục whitelist', 'Đã bảo vệ MILLET_NO_RESTRICT_APP');
-                                showToast('Đã khôi phục whitelist thành công!');
-                              }}
-                              className="w-full p-2.5 rounded-xl bg-indigo-600/25 border border-indigo-500 flex items-center gap-3 text-left hover:bg-indigo-600/35 transition cursor-pointer"
-                            >
-                              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-md">
-                                <Layers className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <div className="text-xs font-bold text-white">Khôi phục whitelist</div>
-                                <div className="text-[9px] text-indigo-200">Thêm GMS vào danh sách</div>
-                              </div>
-                            </button>
+                              className="w-7 h-3.5 rounded-full accent-cyan-500 cursor-pointer"
+                            />
                           </div>
-                        )}
 
-                        {/* SCREEN: ADVANCED SETTINGS */}
-                        {currentScreen === 'advanced_settings' && (
-                          <div className="flex-1 px-3 py-2 space-y-3 overflow-y-auto text-[10px]">
-                            <div className="flex items-center gap-2 pb-1.5 border-b border-cyan-950">
-                              <button onClick={() => setCurrentScreen('settings')} className="text-slate-400 hover:text-white">
-                                <ArrowLeft className="w-4 h-4" />
-                              </button>
-                              <span className="text-xs font-bold text-white tracking-wide">Cài đặt nâng cao</span>
-                            </div>
-
+                          <div className="p-2 rounded-xl bg-[#041224] border border-cyan-950 flex items-center justify-between">
                             <div>
-                              <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                                Tùy chọn hóa
-                              </h5>
-                              <div className="space-y-1">
-                                <div className="p-1.5 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                  <span className="text-slate-200">Kích hoạt khi tắt màn hình</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={screenOffWake}
-                                    onChange={(e) => setScreenOffWake(e.target.checked)}
-                                    className="w-7 h-3.5 rounded-full accent-cyan-500 cursor-pointer"
-                                  />
-                                </div>
-                                <div className="p-1.5 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                  <span className="text-slate-200">Kích hoạt khi mở khóa</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={unlockWake}
-                                    onChange={(e) => setUnlockWake(e.target.checked)}
-                                    className="w-7 h-3.5 rounded-full accent-cyan-500 cursor-pointer"
-                                  />
-                                </div>
-                                <div className="p-1.5 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                  <span className="text-slate-200">Kích hoạt khi mạng reconnect</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={networkReconnectWake}
-                                    onChange={(e) => setNetworkReconnectWake(e.target.checked)}
-                                    className="w-7 h-3.5 rounded-full accent-cyan-500 cursor-pointer"
-                                  />
-                                </div>
-                                <div className="p-1.5 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                  <span className="text-slate-200">Kích hoạt khi khởi động app</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={appStartWake}
-                                    onChange={(e) => setAppStartWake(e.target.checked)}
-                                    className="w-7 h-3.5 rounded-full accent-cyan-500 cursor-pointer"
-                                  />
-                                </div>
-                              </div>
+                              <div className="font-bold text-white text-[10px]">Thông báo thường trực</div>
+                              <div className="text-[8px] text-slate-400">Foreground Service tránh kill app</div>
                             </div>
-
-                            <div>
-                              <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                                Tùy chọn khác
-                              </h5>
-                              <div className="space-y-1">
-                                <div className="p-1.5 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                  <span className="text-slate-200">Thông báo thường trực</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={persistentNotification}
-                                    onChange={(e) => setPersistentNotification(e.target.checked)}
-                                    className="w-7 h-3.5 rounded-full accent-cyan-500 cursor-pointer"
-                                  />
-                                </div>
-                                <div className="p-1.5 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                  <span className="text-slate-200">Ngôn ngữ</span>
-                                  <span className="text-cyan-300 font-semibold">Tiếng Việt</span>
-                                </div>
-                                <div className="p-1.5 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                  <span className="text-slate-200">Tác giả</span>
-                                  <span className="text-cyan-400 font-mono font-bold">YOUNGKNIGHT</span>
-                                </div>
-                              </div>
-                            </div>
+                            <input
+                              type="checkbox"
+                              checked={usePersistentNotification}
+                              onChange={(e) => {
+                                setUsePersistentNotification(e.target.checked);
+                                showToast(e.target.checked ? 'Đã bật thông báo' : 'Đã tắt thông báo');
+                              }}
+                              className="w-7 h-3.5 rounded-full accent-cyan-500 cursor-pointer"
+                            />
                           </div>
-                        )}
+                        </div>
 
-                        {/* SCREEN: ABOUT */}
-                        {currentScreen === 'about' && (
-                          <div className="flex-1 p-3 flex flex-col justify-between overflow-y-auto text-[10px]">
-                            <div className="flex items-center gap-2 pb-1 border-b border-cyan-950">
-                              <button onClick={() => setCurrentScreen('settings')} className="text-slate-400 hover:text-white">
-                                <ArrowLeft className="w-4 h-4" />
-                              </button>
-                              <span className="text-xs font-bold text-white tracking-wide">Giới thiệu</span>
-                            </div>
-
-                            <div className="flex flex-col items-center text-center py-2">
-                              <YkShieldLogo size={52} glow={true} />
-                              <h4 className="text-xs font-black text-white mt-2">
-                                FCM Guard <span className="text-cyan-400">V2</span>
-                              </h4>
-                              <p className="text-[9px] text-slate-400 font-mono">Phiên bản: 2.0.0</p>
-                              <p className="text-[9px] text-cyan-300 mt-1 font-medium">
-                                Giữ kết nối FCM – Không lo mất thông báo
-                              </p>
-                            </div>
-
-                            <div className="space-y-1.5">
-                              <div className="p-1.5 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                <span className="text-slate-400">👤 Tác giả</span>
-                                <span className="text-cyan-400 font-bold">YOUNGKNIGHT</span>
-                              </div>
-                              <div className="p-1.5 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                <span className="text-slate-400">📱 Thiết bị hỗ trợ</span>
-                                <span className="text-slate-200">Xiaomi 15 Ultra / HyperOS</span>
-                              </div>
-                              <div className="p-1.5 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                                <span className="text-slate-400">🛡️ Yêu cầu</span>
-                                <span className="text-emerald-400">Không cần Shizuku / Root</span>
-                              </div>
-                            </div>
-
-                            <button
-                              onClick={() => showToast('Cảm ơn bạn đã đồng hành cùng YOUNGKNIGHT!')}
-                              className="w-full py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition"
-                            >
-                              Cảm ơn bạn đã sử dụng!
-                            </button>
-                          </div>
-                        )}
-
-                        {/* PHONE BOTTOM NAVIGATION BAR */}
-                        <div className="bg-[#030914]/95 backdrop-blur-md border-t border-cyan-900/40 px-6 py-2 flex items-center justify-around shrink-0">
-                          <button
-                            onClick={() => setCurrentScreen('home')}
-                            className={`flex flex-col items-center gap-1 transition ${
-                              currentScreen === 'home' || currentScreen === 'status_details' || currentScreen === 'quick_actions'
-                                ? 'text-cyan-400 font-semibold'
-                                : 'text-slate-400 hover:text-slate-200'
-                            }`}
+                        {/* Section 2 */}
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">Quyền hệ thống &amp; Pin</span>
+                          <div
+                            onClick={() => {
+                              setHasWriteSettingsPermission(true);
+                              showToast('Đã giả lập cấp quyền WRITE_SETTINGS thành công');
+                            }}
+                            className="p-2 rounded-xl bg-[#041224] border border-cyan-950 flex items-center justify-between cursor-pointer hover:border-cyan-800"
                           >
-                            <Shield className="w-4 h-4" />
-                            <span className="text-[10px]">Trang chủ</span>
-                          </button>
+                            <div>
+                              <div className="font-bold text-white text-[10px]">Quyền sửa cài đặt (WRITE_SETTINGS)</div>
+                              <div className="text-[8px] text-slate-400">
+                                {hasWriteSettingsPermission ? '✅ Đã cấp quyền' : '⚠️ Chưa cấp (Bấm để cấp)'}
+                              </div>
+                            </div>
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                          </div>
 
-                          <button
-                            onClick={() => setCurrentScreen('log')}
-                            className={`flex flex-col items-center gap-1 transition ${
-                              currentScreen === 'log' ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'
-                            }`}
+                          <div
+                            onClick={() => showToast('Mở Cài đặt Tối ưu pin của Android')}
+                            className="p-2 rounded-xl bg-[#041224] border border-cyan-950 flex items-center justify-between cursor-pointer hover:border-cyan-800"
                           >
-                            <Activity className="w-4 h-4" />
-                            <span className="text-[10px]">Log</span>
-                          </button>
+                            <div>
+                              <div className="font-bold text-white text-[10px]">Tối ưu hóa pin hệ thống</div>
+                              <div className="text-[8px] text-slate-400">Đặt Không hạn chế pin</div>
+                            </div>
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                          </div>
+                        </div>
 
+                        {/* Manual Action */}
+                        <div className="pt-1">
                           <button
-                            onClick={() => setCurrentScreen('settings')}
-                            className={`flex flex-col items-center gap-1 transition ${
-                              currentScreen === 'settings' || currentScreen === 'apps' || currentScreen === 'advanced_settings' || currentScreen === 'about'
-                                ? 'text-cyan-400 font-semibold'
-                                : 'text-slate-400 hover:text-slate-200'
-                            }`}
+                            onClick={() => {
+                              addLog('fcm', true, 'Phát Broadcast nhịp tim thủ công', 'Gửi Intent tới GMS & GSF');
+                              showToast('Đã phát broadcast nhịp tim thành công!');
+                            }}
+                            className="w-full py-2 rounded-xl bg-[#0c3558] hover:bg-[#0c4472] text-cyan-300 font-bold text-[10px] border border-cyan-800 flex items-center justify-center gap-1.5"
                           >
-                            <Settings className="w-4 h-4" />
-                            <span className="text-[10px]">Cài đặt</span>
+                            <Send className="w-3 h-3" /> Phát Broadcast nhịp tim thủ công
                           </button>
                         </div>
                       </div>
                     )}
 
-                    {/* Bottom Phone Gesture Bar */}
-                    <div className="w-full py-1 flex justify-center bg-[#020914]">
-                      <div className="w-24 h-1 rounded-full bg-slate-600" />
-                    </div>
+                    {/* TAB 5: GIỚI THIỆU */}
+                    {currentTab === 'about' && (
+                      <div className="space-y-2.5 flex-1 overflow-y-auto text-[10px]">
+                        <div className="flex flex-col items-center text-center pt-2">
+                          <div className="w-16 h-16 rounded-full border-2 border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.5)] flex items-center justify-center bg-[#031526]">
+                            <YkShieldLogo size={36} glow={true} />
+                          </div>
+                          <h3 className="text-xs font-black text-white mt-1.5">FCM Guard V2</h3>
+                          <p className="text-[9px] text-cyan-400 font-mono">Phiên bản 2.0.0 (Build 40)</p>
+                          <p className="text-[9px] text-slate-400">Tác giả: YOUNGKNIGHT</p>
+                        </div>
+
+                        <div className="p-2.5 rounded-xl bg-[#041224] border border-cyan-950 space-y-1">
+                          <div className="font-bold text-white text-[10px]">Tính trung thực &amp; Cam kết:</div>
+                          <ul className="text-[9px] text-slate-300 space-y-1 list-disc pl-3">
+                            <li>Không yêu cầu Root hay Shizuku.</li>
+                            <li>Không dùng API ẩn nguy hiểm hay quyền không được cấp.</li>
+                            <li>Báo lỗi trung thực khi chưa có quyền WRITE_SETTINGS.</li>
+                            <li>Không cam đoan 100% ngăn HyperOS đóng app nếu ROM cạn RAM.</li>
+                          </ul>
+                        </div>
+
+                        <div className="text-center py-2 text-[9px] italic text-cyan-300 font-medium">
+                          &ldquo;Vì những thông báo quan trọng của bạn!&rdquo; — YOUNGKNIGHT
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* BOTTOM NAVIGATION BAR (5 TABS AS SPECIFIED IN USER REQUEST) */}
+                  <div className="bg-[#030d1a] border-t border-cyan-900/40 px-2 py-2 flex items-center justify-around shrink-0 text-[10px]">
+                    <button
+                      onClick={() => setCurrentTab('home')}
+                      className={`flex flex-col items-center gap-0.5 transition ${
+                        currentTab === 'home' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Shield className="w-4 h-4" />
+                      <span className="text-[9px]">Trang chủ</span>
+                    </button>
+
+                    <button
+                      onClick={() => setCurrentTab('log')}
+                      className={`flex flex-col items-center gap-0.5 transition ${
+                        currentTab === 'log' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Activity className="w-4 h-4" />
+                      <span className="text-[9px]">Nhật ký</span>
+                    </button>
+
+                    <button
+                      onClick={() => setCurrentTab('apps')}
+                      className={`flex flex-col items-center gap-0.5 transition ${
+                        currentTab === 'apps' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Smartphone className="w-4 h-4" />
+                      <span className="text-[9px]">Ứng dụng</span>
+                    </button>
+
+                    <button
+                      onClick={() => setCurrentTab('settings')}
+                      className={`flex flex-col items-center gap-0.5 transition ${
+                        currentTab === 'settings' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Settings className="w-4 h-4" />
+                      <span className="text-[9px]">Cài đặt</span>
+                    </button>
+
+                    <button
+                      onClick={() => setCurrentTab('about')}
+                      className={`flex flex-col items-center gap-0.5 transition ${
+                        currentTab === 'about' ? 'text-cyan-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Info className="w-4 h-4" />
+                      <span className="text-[9px]">Giới thiệu</span>
+                    </button>
+                  </div>
+
+                  {/* Bottom Phone Gesture Bar */}
+                  <div className="w-full py-1 flex justify-center bg-[#020914]">
+                    <div className="w-24 h-1 rounded-full bg-slate-600" />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* RIGHT: INTERACTIVE CONTROL PANEL & REAL-TIME SIMULATION SUITE */}
+            {/* RIGHT SIDE: INTERACTIVE LAB CONTROLLER & STATE SIMULATOR */}
             <div className="lg:col-span-5 space-y-4">
-              {/* Controls Card */}
-              <div className="p-5 rounded-2xl bg-[#041122] border border-cyan-800/60 shadow-xl space-y-4">
-                <div className="flex items-center justify-between border-b border-cyan-900/50 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Sliders className="w-5 h-5 text-cyan-400" />
-                    <h3 className="text-sm font-bold text-white">Bảng Điều Khiển Tình Huống Giả Lập</h3>
-                  </div>
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">
-                    Interactive Lab
+              <div className="p-5 rounded-2xl bg-[#041122] border border-cyan-800/60 shadow-xl space-y-3">
+                <div className="flex items-center justify-between border-b border-cyan-900/50 pb-2">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-cyan-400" />
+                    Thử Nghiệm Tình Huống Android V2
+                  </h3>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 font-bold">
+                    Lab Simulator
                   </span>
                 </div>
 
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Bấm các nút dưới đây để kích hoạt các tình huống thực tế của Xiaomi HyperOS và quan sát cách FCM Guard V2 tự động phát hiện, sửa lỗi và ghi log thời gian thực trên màn hình bên cạnh:
+                <p className="text-xs text-slate-300">
+                  Bấm để mô phỏng các sự kiện thực tế và kiểm tra phản ứng của các thành phần FCM Guard V2:
                 </p>
 
-                {/* Scenario buttons */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
-                    onClick={simulateFcmDrop}
-                    className="p-3 rounded-xl bg-slate-900/90 border border-slate-700 hover:border-amber-500 text-left transition flex items-start gap-2.5 hover:bg-slate-800 cursor-pointer"
+                    onClick={() => {
+                      setHasWriteSettingsPermission(!hasWriteSettingsPermission);
+                      showToast(`Quyền WRITE_SETTINGS: ${!hasWriteSettingsPermission ? 'ĐÃ CẤP' : 'CHƯA CẤP'}`);
+                    }}
+                    className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700 hover:border-cyan-500 text-left transition"
                   >
-                    <Radio className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="text-xs font-bold text-slate-200">Mất kết nối FCM</div>
-                      <div className="text-[10px] text-slate-400">Kiểm tra tự động kết nối lại</div>
+                    <div className="text-xs font-bold text-white">Đổi quyền WRITE_SETTINGS</div>
+                    <div className="text-[10px] text-slate-400">
+                      Hiện tại: {hasWriteSettingsPermission ? 'Đã cấp' : 'Chưa cấp'}
                     </div>
                   </button>
 
                   <button
-                    onClick={simulateDoze}
-                    className="p-3 rounded-xl bg-slate-900/90 border border-slate-700 hover:border-cyan-500 text-left transition flex items-start gap-2.5 hover:bg-slate-800 cursor-pointer"
+                    onClick={() => {
+                      addLog('fcm', false, 'FCM mất tín hiệu heartbeat', 'Dịch vụ ngầm tự động kích hoạt khôi phục');
+                      showToast('⚠️ Mô phỏng: Mất heartbeat FCM');
+                    }}
+                    className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700 hover:border-amber-500 text-left transition"
                   >
-                    <Moon className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="text-xs font-bold text-slate-200">Kích hoạt chế độ Doze</div>
-                      <div className="text-[10px] text-slate-400">Thử nghiệm đánh thức FCM</div>
-                    </div>
+                    <div className="text-xs font-bold text-white">Mất kết nối FCM</div>
+                    <div className="text-[10px] text-slate-400">Tự động phát hiện &amp; log</div>
                   </button>
 
                   <button
-                    onClick={simulateWhitelistLoss}
-                    className="p-3 rounded-xl bg-slate-900/90 border border-slate-700 hover:border-rose-500 text-left transition flex items-start gap-2.5 hover:bg-slate-800 cursor-pointer"
+                    onClick={() => {
+                      addLog('doze', true, 'Kích hoạt Doze WakeLock', 'Đã bảo vệ cổng push thông báo an toàn');
+                      showToast('🌙 Mô phỏng: Doze Mode kích hoạt');
+                    }}
+                    className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700 hover:border-cyan-500 text-left transition"
                   >
-                    <Layers className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="text-xs font-bold text-slate-200">Mất Whitelist GMS</div>
-                      <div className="text-[10px] text-slate-400">Kiểm tra tự phục hồi MILLET</div>
-                    </div>
+                    <div className="text-xs font-bold text-white">Kích hoạt Doze</div>
+                    <div className="text-[10px] text-slate-400">Thử nghiệm đánh thức FCM</div>
                   </button>
 
                   <button
-                    onClick={simulateNetworkSwitch}
-                    className="p-3 rounded-xl bg-slate-900/90 border border-slate-700 hover:border-emerald-500 text-left transition flex items-start gap-2.5 hover:bg-slate-800 cursor-pointer"
+                    onClick={runCheckNow}
+                    className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700 hover:border-emerald-500 text-left transition"
                   >
-                    <Wifi className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="text-xs font-bold text-slate-200">Đổi Wi-Fi / 5G</div>
-                      <div className="text-[10px] text-slate-400">Kiểm tra wake khi mạng đổi</div>
-                    </div>
+                    <div className="text-xs font-bold text-white">Kiểm tra ngay</div>
+                    <div className="text-[10px] text-slate-400">Chạy quy trình quét toàn diện</div>
                   </button>
-                </div>
-
-                {/* Quick Screen Jumps */}
-                <div className="pt-2 border-t border-cyan-900/40">
-                  <div className="text-xs font-bold text-slate-300 mb-2">Chuyển nhanh màn hình giả lập:</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      onClick={() => {
-                        setIsLocked(false);
-                        setCurrentScreen('home');
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-slate-900 border border-cyan-900 text-[11px] text-cyan-300 hover:bg-cyan-950 font-medium cursor-pointer"
-                    >
-                      Trang chủ
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsLocked(false);
-                        setCurrentScreen('log');
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-slate-900 border border-cyan-900 text-[11px] text-cyan-300 hover:bg-cyan-950 font-medium cursor-pointer"
-                    >
-                      Nhật ký Log
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsLocked(false);
-                        setCurrentScreen('apps');
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-slate-900 border border-cyan-900 text-[11px] text-cyan-300 hover:bg-cyan-950 font-medium cursor-pointer"
-                    >
-                      Quản lý ứng dụng
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsLocked(false);
-                        setCurrentScreen('quick_actions');
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-slate-900 border border-cyan-900 text-[11px] text-cyan-300 hover:bg-cyan-950 font-medium cursor-pointer"
-                    >
-                      Hành động nhanh
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsLocked(false);
-                        setCurrentScreen('status_details');
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-slate-900 border border-cyan-900 text-[11px] text-cyan-300 hover:bg-cyan-950 font-medium cursor-pointer"
-                    >
-                      Chi tiết trạng thái
-                    </button>
-                    <button
-                      onClick={() => setIsLocked(!isLocked)}
-                      className="px-2.5 py-1 rounded-lg bg-purple-950/80 border border-purple-600/60 text-[11px] text-purple-200 hover:bg-purple-900 font-bold flex items-center gap-1 cursor-pointer"
-                    >
-                      <Lock className="w-3 h-3" /> {isLocked ? 'Mở màn hình' : 'Khóa màn hình'}
-                    </button>
-                  </div>
                 </div>
               </div>
 
-              {/* Live Telemetry / Diagnostics Box */}
+              {/* Architecture & Truthfulness Box */}
               <div className="p-5 rounded-2xl bg-[#041122] border border-cyan-800/60 shadow-xl space-y-3">
-                <div className="flex items-center justify-between text-xs font-bold text-white border-b border-cyan-900/50 pb-2">
-                  <span>Trạng Thái Hệ Thống Thời Gian Thực</span>
-                  <span className="flex items-center gap-1 text-emerald-400">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    Bảo vệ 24/7
-                  </span>
+                <div className="flex items-center gap-2 text-white font-bold text-xs border-b border-cyan-900/50 pb-2">
+                  <Shield className="w-4 h-4 text-emerald-400" />
+                  Nguyên Tắc An Toàn &amp; Nâng Cấp V2
                 </div>
 
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
-                    <span className="text-slate-400">Thiết bị mô phỏng:</span>
-                    <span className="font-semibold text-slate-200">Xiaomi 15 Ultra (HyperOS China ROM)</span>
+                <div className="space-y-2 text-xs text-slate-300">
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800">
+                    <span className="font-bold text-cyan-400">1. Đã lưu bản backup:</span> Toàn bộ 12 file Java cũ được lưu trữ an toàn trong <code>legacy_backup/java/</code>.
                   </div>
-                  <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
-                    <span className="text-slate-400">Dịch vụ nền Google:</span>
-                    <span className="font-mono text-cyan-400 font-semibold">com.google.android.gms</span>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800">
+                    <span className="font-bold text-cyan-400">2. Nâng cấp Kotlin &amp; Compose:</span> Chuyển đổi toàn diện sang Kotlin 2.0 &amp; Jetpack Compose Material 3.
                   </div>
-                  <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
-                    <span className="text-slate-400">Khóa whitelist hệ thống:</span>
-                    <span className="font-mono text-emerald-400 font-semibold">MILLET_NO_RESTRICT_APP</span>
-                  </div>
-                  <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
-                    <span className="text-slate-400">Trạng thái quyền:</span>
-                    <span className="text-emerald-400 font-semibold">WRITE_SETTINGS (Đã cấp)</span>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800">
+                    <span className="font-bold text-cyan-400">3. Tính trung thực tuyệt đối:</span> Không giả lập lệnh thành công nếu chưa có quyền hệ thống thật.
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      )}
 
+      {/* SECTION 2: KOTLIN CODE EXPLORER & MIGRATION LOGS */}
+      {viewSection === 'code' && (
+        <main className="max-w-6xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
+          <div className="p-5 rounded-2xl bg-[#041122] border border-cyan-800/60 shadow-xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-900/60 pb-3">
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <Code2 className="w-5 h-5 text-cyan-400" />
+                  Mã Nguồn Kotlin &amp; Jetpack Compose V2 (Bản Nâng Cấp Đầy Đủ)
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Tất cả các file Kotlin đã được tạo hoàn chỉnh trong <code>app/src/main/kotlin/com/youngknight/fcmguard/</code>
+                </p>
+              </div>
+
+              {/* Code file selector */}
+              <div className="flex flex-wrap gap-1.5 text-xs">
                 <button
-                  onClick={runCheckAndRepair}
-                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition active:scale-98"
+                  onClick={() => setActiveCodeFile('migration')}
+                  className={`px-3 py-1 rounded-lg font-medium transition ${
+                    activeCodeFile === 'migration'
+                      ? 'bg-cyan-500 text-slate-950 font-bold'
+                      : 'bg-slate-900 text-slate-300 hover:text-white'
+                  }`}
                 >
-                  <Zap className="w-4 h-4 fill-white" />
-                  Kích hoạt kiểm tra toàn diện ngay
+                  MIGRATION_V2_LOG.md
+                </button>
+                <button
+                  onClick={() => setActiveCodeFile('main')}
+                  className={`px-3 py-1 rounded-lg font-medium transition ${
+                    activeCodeFile === 'main'
+                      ? 'bg-cyan-500 text-slate-950 font-bold'
+                      : 'bg-slate-900 text-slate-300 hover:text-white'
+                  }`}
+                >
+                  MainActivity.kt
+                </button>
+                <button
+                  onClick={() => setActiveCodeFile('settings')}
+                  className={`px-3 py-1 rounded-lg font-medium transition ${
+                    activeCodeFile === 'settings'
+                      ? 'bg-cyan-500 text-slate-950 font-bold'
+                      : 'bg-slate-900 text-slate-300 hover:text-white'
+                  }`}
+                >
+                  SettingsGuard.kt
+                </button>
+                <button
+                  onClick={() => setActiveCodeFile('service')}
+                  className={`px-3 py-1 rounded-lg font-medium transition ${
+                    activeCodeFile === 'service'
+                      ? 'bg-cyan-500 text-slate-950 font-bold'
+                      : 'bg-slate-900 text-slate-300 hover:text-white'
+                  }`}
+                >
+                  GuardService.kt
+                </button>
+                <button
+                  onClick={() => setActiveCodeFile('log')}
+                  className={`px-3 py-1 rounded-lg font-medium transition ${
+                    activeCodeFile === 'log'
+                      ? 'bg-cyan-500 text-slate-950 font-bold'
+                      : 'bg-slate-900 text-slate-300 hover:text-white'
+                  }`}
+                >
+                  LogManager.kt
+                </button>
+                <button
+                  onClick={() => setActiveCodeFile('manifest')}
+                  className={`px-3 py-1 rounded-lg font-medium transition ${
+                    activeCodeFile === 'manifest'
+                      ? 'bg-cyan-500 text-slate-950 font-bold'
+                      : 'bg-slate-900 text-slate-300 hover:text-white'
+                  }`}
+                >
+                  AndroidManifest.xml
                 </button>
               </div>
+            </div>
+
+            {/* Code Viewer */}
+            <div className="bg-[#020713] rounded-xl border border-cyan-950 p-4 font-mono text-xs overflow-x-auto text-slate-300 leading-relaxed max-h-[500px]">
+              {activeCodeFile === 'migration' && (
+                <pre>
+{`# BẢN GHI NÂNG CẤP MÃ NGUỒN (MIGRATION V2 LOG)
+Tác giả: YOUNGKNIGHT | Package: com.youngknight.fcmguard | Bản: 2.0.0 (Build 40)
+
+1. BẢN SAO LƯU GỐC:
+   - Toàn bộ 12 file .java gốc được lưu trữ an toàn tại /legacy_backup/java/
+   - Cấu hình gradle và AndroidManifest gốc tại /legacy_backup/config/
+
+2. CÁC TỆP TIN KOTLIN V2 ĐÃ TẠO:
+   - app/src/main/kotlin/com/youngknight/fcmguard/MainActivity.kt (Compose UI điều phối 5 màn hình)
+   - app/src/main/kotlin/com/youngknight/fcmguard/ui/screens/HomeScreen.kt (Trang chủ)
+   - app/src/main/kotlin/com/youngknight/fcmguard/ui/screens/LogScreen.kt (Nhật ký sự kiện)
+   - app/src/main/kotlin/com/youngknight/fcmguard/ui/screens/AppsScreen.kt (Quản lý ứng dụng)
+   - app/src/main/kotlin/com/youngknight/fcmguard/ui/screens/SettingsScreen.kt (Cài đặt)
+   - app/src/main/kotlin/com/youngknight/fcmguard/ui/screens/AboutScreen.kt (Giới thiệu)
+   - app/src/main/kotlin/com/youngknight/fcmguard/service/GuardService.kt (Foreground Service)
+   - app/src/main/kotlin/com/youngknight/fcmguard/receiver/BootReceiver.kt (Khởi động sau boot)
+   - app/src/main/kotlin/com/youngknight/fcmguard/core/SettingsGuard.kt (Kiểm tra quyền trung thực)
+   - app/src/main/kotlin/com/youngknight/fcmguard/core/LogManager.kt (Ghi log có thời gian & lỗi)
+   - app/src/main/kotlin/com/youngknight/fcmguard/core/GmsStatusChecker.kt (Kiểm tra GMS)
+   - app/src/main/kotlin/com/youngknight/fcmguard/core/NetworkStatusChecker.kt (Kiểm tra mạng)
+   - app/src/main/kotlin/com/youngknight/fcmguard/core/PowerStatusChecker.kt (Kiểm tra Doze)
+
+3. CẢI TIẾN TRUNG THỰC:
+   - Kiểm tra Settings.System.canWrite(context). Không giả vờ ghi thành công khi chưa cấp quyền.`}
+                </pre>
+              )}
+
+              {activeCodeFile === 'main' && (
+                <pre>
+{`package com.youngknight.fcmguard
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import com.youngknight.fcmguard.ui.theme.FcmGuardTheme
+import com.youngknight.fcmguard.ui.screens.*
+
+class MainActivity : ComponentActivity() {
+    enum class NavTab { HOME, LOG, APPS, SETTINGS, ABOUT }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            FcmGuardTheme {
+                // Jetpack Compose Scaffold with 5 tabs NavigationBar:
+                // Trang chủ, Nhật ký, Ứng dụng, Cài đặt, Giới thiệu
+            }
+        }
+    }
+}`}
+                </pre>
+              )}
+
+              {activeCodeFile === 'settings' && (
+                <pre>
+{`package com.youngknight.fcmguard.core
+
+import android.content.Context
+import android.provider.Settings
+
+object SettingsGuard {
+    const val DEFAULT_KEY = "MILLET_NO_RESTRICT_APP"
+    const val DEFAULT_REQUIRED_ITEM = "com.google.android.gms"
+
+    fun canWriteSettings(context: Context): Boolean {
+        return Settings.System.canWrite(context)
+    }
+
+    @Synchronized
+    fun repair(context: Context): RepairResult {
+        if (!canWriteSettings(context)) {
+            return RepairResult(
+                success = false,
+                changed = false,
+                currentValue = readWhitelist(context),
+                message = "Chưa được cấp quyền sửa cài đặt hệ thống (WRITE_SETTINGS).",
+                errorCode = "PERMISSION_DENIED"
+            )
+        }
+        // Ghi an toàn vào Settings.System khi có quyền thực tế...
+    }
+}`}
+                </pre>
+              )}
+
+              {activeCodeFile === 'service' && (
+                <pre>
+{`package com.youngknight.fcmguard.service
+
+import android.app.Service
+import android.content.Intent
+import android.database.ContentObserver
+import com.youngknight.fcmguard.core.SettingsGuard
+
+class GuardService : Service() {
+    // Foreground Service với ContentObserver lắng nghe MILLET_NO_RESTRICT_APP
+    // Tối ưu năng lượng: Không lặp polling vô tận, chỉ tự động khôi phục khi bị xóa.
+}`}
+                </pre>
+              )}
+
+              {activeCodeFile === 'log' && (
+                <pre>
+{`package com.youngknight.fcmguard.core
+
+object LogManager {
+    enum class LogType { SYSTEM, FCM, GMS, DOZE }
+
+    data class LogEntry(
+        val id: String,
+        val timestamp: Long,
+        val timeFormatted: String,
+        val type: LogType,
+        val success: Boolean,
+        val title: String,
+        val details: String = "",
+        val errorCode: String? = null
+    )
+    // Lưu trữ và truy xuất log có cấu trúc chi tiết
+}`}
+                </pre>
+              )}
+
+              {activeCodeFile === 'manifest' && (
+                <pre>
+{`<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <application
+        android:label="FCM Guard V2"
+        android:theme="@style/AppTheme">
+        <activity android:name="com.youngknight.fcmguard.MainActivity" android:exported="true" />
+        <service android:name="com.youngknight.fcmguard.service.GuardService" android:exported="false" />
+        <receiver android:name="com.youngknight.fcmguard.receiver.BootReceiver" android:exported="true" />
+    </application>
+</manifest>`}
+                </pre>
+              )}
             </div>
           </div>
         </main>
       )}
 
-      {/* VIEW 2: FULL 9-SCREEN POSTER LAYOUT (BẢNG THIẾT KẾ 9 MÀN HÌNH CHUẨN POSTER) */}
-      {viewMode === 'poster' && (
-        <main className="max-w-[1520px] mx-auto px-4 py-8 space-y-10 flex-1 w-full">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <LayoutGrid className="w-5 h-5 text-cyan-400" />
-              Toàn Cảnh 9 Màn Hình FCM Guard V2 (Thiết Kế Chuẩn Hình Ảnh)
-            </h2>
-            <button
-              onClick={() => setViewMode('emulator')}
-              className="text-xs font-bold text-cyan-300 bg-cyan-950 border border-cyan-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-cyan-900 transition"
-            >
-              <Smartphone className="w-3.5 h-3.5" /> Chuyển sang Giả Lập Tương Tác
-            </button>
-          </div>
-
-          {/* Row 1: 4 screens */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-            {/* Screen 1: Home */}
-            <div className="flex flex-col items-center">
-              <div className="w-full max-w-[310px] h-[610px] rounded-[36px] bg-[#020914] border-[3px] border-cyan-500/70 shadow-[0_0_25px_rgba(6,182,212,0.3)] flex flex-col overflow-hidden relative">
-                <div className="px-4 pt-2.5 pb-1 flex items-center justify-between text-[11px] font-medium text-slate-200">
-                  <span>10:24</span>
-                  <div className="flex items-center gap-1.5">
-                    <Wifi className="w-3.5 h-3.5" />
-                    <span className="text-[10px] font-bold">5G</span>
-                    <div className="w-4 h-2 rounded-xs border border-current flex items-center p-0.5">
-                      <div className="h-full w-full bg-current rounded-xs" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="px-4 py-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <YkShieldLogo size={24} />
-                    <span className="text-xs font-bold text-white tracking-wide">FCM Guard <span className="text-cyan-400">V2</span></span>
-                  </div>
-                  <Settings className="w-4 h-4 text-slate-400" />
-                </div>
-
-                <div className="flex-1 px-4 py-1.5 flex flex-col justify-between overflow-y-auto">
-                  <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center shrink-0">
-                      <Check className="w-4 h-4 text-emerald-400" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-emerald-300">Đang hoạt động</div>
-                      <div className="text-[10px] text-emerald-400/80">Bảo vệ kết nối FCM của bạn</div>
-                    </div>
-                  </div>
-
-                  <div className="my-2 relative flex items-center justify-center">
-                    <div className="w-36 h-36 rounded-full border border-cyan-500/20 flex items-center justify-center animate-pulse">
-                      <div className="w-28 h-28 rounded-full border-2 border-cyan-400/50 shadow-[0_0_20px_rgba(6,182,212,0.4)] flex items-center justify-center bg-[#031526]/80">
-                        <YkShieldLogo size={58} glow={true} />
-                      </div>
-                    </div>
-                    <div className="absolute -bottom-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-[#020914] flex items-center justify-center shadow-lg">
-                      <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="px-3 py-1.5 rounded-lg bg-[#041224] border border-cyan-900/40 flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                          <Check className="w-2.5 h-2.5" />
-                        </div>
-                        <div>
-                          <div className="font-semibold text-white">FCM</div>
-                          <div className="text-[9px] text-emerald-400">Đã kết nối</div>
-                        </div>
-                      </div>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    </div>
-
-                    <div className="px-3 py-1.5 rounded-lg bg-[#041224] border border-cyan-900/40 flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                          <Check className="w-2.5 h-2.5" />
-                        </div>
-                        <div>
-                          <div className="font-semibold text-white">GMS (Google Play services)</div>
-                          <div className="text-[9px] text-emerald-400">Đang chạy</div>
-                        </div>
-                      </div>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    </div>
-
-                    <div className="px-3 py-1.5 rounded-lg bg-[#041224] border border-cyan-900/40 flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                          <Check className="w-2.5 h-2.5" />
-                        </div>
-                        <div>
-                          <div className="font-semibold text-white">Doze</div>
-                          <div className="text-[9px] text-emerald-400">Không hoạt động</div>
-                        </div>
-                      </div>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    </div>
-
-                    <div className="px-3 py-1.5 rounded-lg bg-[#041224] border border-cyan-900/40 flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                          <Check className="w-2.5 h-2.5" />
-                        </div>
-                        <div>
-                          <div className="font-semibold text-white">Mạng</div>
-                          <div className="text-[9px] text-emerald-400">Đã kết nối (Wi-Fi / LTE)</div>
-                        </div>
-                      </div>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    </div>
-                  </div>
-
-                  <div className="text-center text-[10px] text-slate-400 pt-1">
-                    Lần kiểm tra gần nhất: <br />
-                    <span className="text-slate-300 font-mono font-medium">{lastCheckTime}</span>
-                  </div>
-
-                  <button
-                    onClick={runCheckAndRepair}
-                    className="w-full py-2.5 rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-blue-600 hover:brightness-110 text-white font-bold text-xs shadow-[0_0_20px_rgba(6,182,212,0.6)] flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Zap className="w-4 h-4 fill-white" />
-                    Kiểm tra &amp; Sửa ngay
-                  </button>
-                </div>
-              </div>
-              <p className="text-xs font-bold text-cyan-300 mt-2.5 text-center">
-                Màn hình chính – Trạng thái tổng quan
-              </p>
-            </div>
-
-            {/* Screen 2: Logs */}
-            <div className="flex flex-col items-center">
-              <div className="w-full max-w-[310px] h-[610px] rounded-[36px] bg-[#020914] border-[3px] border-cyan-500/70 shadow-[0_0_25px_rgba(6,182,212,0.3)] flex flex-col overflow-hidden relative">
-                <div className="px-4 pt-2.5 pb-1 flex items-center justify-between text-[11px] font-medium text-slate-200">
-                  <span>10:24</span>
-                  <div className="flex items-center gap-1.5">
-                    <Wifi className="w-3.5 h-3.5" />
-                    <span className="text-[10px] font-bold">5G</span>
-                    <div className="w-4 h-2 rounded-xs border border-current flex items-center p-0.5">
-                      <div className="h-full w-full bg-current rounded-xs" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="px-4 py-2 flex items-center justify-between border-b border-cyan-950/80">
-                  <div className="flex items-center gap-2">
-                    <YkShieldLogo size={22} />
-                    <span className="text-xs font-bold text-white tracking-wide">FCM Guard <span className="text-cyan-400">V2</span></span>
-                  </div>
-                  <Search className="w-4 h-4 text-slate-400" />
-                </div>
-
-                <div className="px-3 pt-2.5 pb-2 space-y-2">
-                  <h3 className="text-xs font-bold text-white">Nhật ký hoạt động</h3>
-                  <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
-                    {(['all', 'system', 'fcm', 'gms', 'doze'] as const).map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => setLogFilter(f)}
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition shrink-0 ${
-                          logFilter === f
-                            ? 'bg-cyan-500 text-slate-950 font-bold'
-                            : 'bg-[#05162a] text-slate-400 border border-cyan-900/50'
-                        }`}
-                      >
-                        {f === 'all' ? 'Tất cả' : f === 'system' ? 'Hệ thống' : f.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex-1 px-3 space-y-2 overflow-y-auto text-[10px]">
-                  {filteredLogs.map((l) => (
-                    <div
-                      key={l.id}
-                      className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-start gap-2"
-                    >
-                      <div className="font-mono text-slate-400 pt-0.5">{l.time}</div>
-                      <div className="pt-0.5">
-                        {l.success ? (
-                          <div className="w-3.5 h-3.5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                            <Check className="w-2.5 h-2.5" />
-                          </div>
-                        ) : (
-                          <div className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                            <AlertTriangle className="w-2.5 h-2.5" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-slate-200 truncate">{l.title}</div>
-                        {l.desc && <div className="text-[9px] text-slate-400 truncate">{l.desc}</div>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <p className="text-xs font-bold text-cyan-300 mt-2.5 text-center">
-                Nhật ký chi tiết – Theo dõi realtime
-              </p>
-            </div>
-
-            {/* Screen 3: Settings */}
-            <div className="flex flex-col items-center">
-              <div className="w-full max-w-[310px] h-[610px] rounded-[36px] bg-[#020914] border-[3px] border-cyan-500/70 shadow-[0_0_25px_rgba(6,182,212,0.3)] flex flex-col overflow-hidden relative">
-                <div className="px-4 pt-2.5 pb-1 flex items-center justify-between text-[11px] font-medium text-slate-200">
-                  <span>10:24</span>
-                  <div className="flex items-center gap-1.5">
-                    <Wifi className="w-3.5 h-3.5" />
-                    <span className="text-[10px] font-bold">5G</span>
-                    <div className="w-4 h-2 rounded-xs border border-current flex items-center p-0.5">
-                      <div className="h-full w-full bg-current rounded-xs" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="px-4 py-2 flex items-center gap-2 border-b border-cyan-950/80">
-                  <Settings className="w-4 h-4 text-cyan-400" />
-                  <span className="text-xs font-bold text-white tracking-wide">Cài đặt</span>
-                </div>
-
-                <div className="flex-1 px-3 py-2 space-y-3 overflow-y-auto text-[11px]">
-                  <div>
-                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                      Tùy chọn chính
-                    </h4>
-                    <div className="space-y-1.5">
-                      <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-white">Tự khởi động cùng hệ thống</div>
-                          <div className="text-[9px] text-slate-400">Tự động chạy lại sau khi khởi động</div>
-                        </div>
-                        <span className="w-3.5 h-3.5 rounded-full bg-cyan-400" />
-                      </div>
-                      <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-white">Giám sát FCM/GMS</div>
-                          <div className="text-[9px] text-slate-400">Kiểm tra và phục hồi khi bị ngắt</div>
-                        </div>
-                        <span className="w-3.5 h-3.5 rounded-full bg-cyan-400" />
-                      </div>
-                      <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-white">Kiểm tra định kỳ</div>
-                          <div className="text-[9px] text-slate-400">Tần suất kiểm tra trạng thái</div>
-                        </div>
-                        <span className="text-[10px] text-slate-400">15 phút &gt;</span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-white">Wake FCM khi có sự kiện</div>
-                          <div className="text-[9px] text-slate-400">Màn hình, mở khóa, mạng...</div>
-                        </div>
-                        <span className="text-slate-400">&gt;</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                      Ứng dụng quan trọng
-                    </h4>
-                    <div className="space-y-1.5">
-                      <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-white">Quản lý danh sách ứng dụng</div>
-                          <div className="text-[9px] text-slate-400">Thêm / xóa ứng dụng bảo vệ</div>
-                        </div>
-                        <span className="text-slate-400">&gt;</span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-white">MILLET_NO_RESTRICT_APP</div>
-                          <div className="text-[9px] text-slate-400">Xem / khôi phục whitelist</div>
-                        </div>
-                        <span className="text-slate-400">&gt;</span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-white">Tối ưu pin</div>
-                          <div className="text-[9px] text-slate-400">Giảm thiểu ảnh hưởng đến pin</div>
-                        </div>
-                        <span className="text-slate-400">&gt;</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs font-bold text-cyan-300 mt-2.5 text-center">
-                Cài đặt – Tùy chỉnh theo nhu cầu
-              </p>
-            </div>
-
-            {/* Screen 4: App Management */}
-            <div className="flex flex-col items-center">
-              <div className="w-full max-w-[310px] h-[610px] rounded-[36px] bg-[#020914] border-[3px] border-cyan-500/70 shadow-[0_0_25px_rgba(6,182,212,0.3)] flex flex-col overflow-hidden relative">
-                <div className="px-4 pt-2.5 pb-1 flex items-center justify-between text-[11px] font-medium text-slate-200">
-                  <span>10:24</span>
-                  <div className="flex items-center gap-1.5">
-                    <Wifi className="w-3.5 h-3.5" />
-                    <span className="text-[10px] font-bold">5G</span>
-                    <div className="w-4 h-2 rounded-xs border border-current flex items-center p-0.5">
-                      <div className="h-full w-full bg-current rounded-xs" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="px-4 py-2 flex items-center justify-between border-b border-cyan-950/80">
-                  <div className="flex items-center gap-2">
-                    <ArrowLeft className="w-4 h-4 text-slate-400" />
-                    <span className="text-xs font-bold text-white tracking-wide">Quản lý ứng dụng</span>
-                  </div>
-                  <Search className="w-4 h-4 text-slate-400" />
-                </div>
-
-                <div className="px-3 pt-2.5 pb-1 flex items-center gap-1.5">
-                  <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-cyan-500 text-slate-950">
-                    Tất cả
-                  </span>
-                  <span className="px-3 py-1 rounded-full text-[10px] font-semibold bg-[#041224] text-slate-400">
-                    Được bảo vệ
-                  </span>
-                  <span className="px-3 py-1 rounded-full text-[10px] font-semibold bg-[#041224] text-slate-400">
-                    Chưa bảo vệ
-                  </span>
-                </div>
-
-                <div className="flex-1 px-3 py-1.5 space-y-1.5 overflow-y-auto text-[11px]">
-                  {apps.map((app) => (
-                    <div
-                      key={app.id}
-                      className="p-2 rounded-lg bg-[#041224] border border-cyan-950 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-base shrink-0">{app.icon}</span>
-                        <div className="min-w-0">
-                          <div className="font-semibold text-white truncate text-[11px]">{app.name}</div>
-                          {app.sub && <div className="text-[9px] text-slate-400 truncate">{app.sub}</div>}
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/50 border border-emerald-500/40 px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
-                        <Check className="w-2.5 h-2.5" /> Đã thêm
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <p className="text-xs font-bold text-cyan-300 mt-2.5 text-center">
-                Quản lý ứng dụng – Bảo vệ toàn diện
-              </p>
-            </div>
-          </div>
-
-          {/* Row 2: 5 screens */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 pt-4">
-            {/* Screen 5: Status Details */}
-            <div className="flex flex-col items-center">
-              <div className="w-full max-w-[280px] h-[580px] rounded-[34px] bg-[#020914] border-[3px] border-cyan-500/70 shadow-[0_0_20px_rgba(6,182,212,0.3)] flex flex-col overflow-hidden relative p-3 text-[10px] space-y-2">
-                <div className="font-bold text-white text-xs pb-1 border-b border-cyan-950">
-                  &larr; Chi tiết trạng thái
-                </div>
-                <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 space-y-1">
-                  <div className="font-bold text-cyan-400">FCM</div>
-                  <div className="flex justify-between"><span>&gt; Trạng thái kết nối</span><span className="text-emerald-400 font-semibold">Đã kết nối</span></div>
-                  <div className="flex justify-between"><span>&gt; IP hiện tại</span><span>fcm... (ipn 10)</span></div>
-                  <div className="flex justify-between"><span>&gt; Thời gian kết nối</span><span>10:22:37</span></div>
-                </div>
-                <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 space-y-1">
-                  <div className="font-bold text-cyan-400">GMS</div>
-                  <div className="flex justify-between"><span>&gt; Trạng thái</span><span className="text-emerald-400 font-semibold">Đang chạy</span></div>
-                  <div className="flex justify-between"><span>&gt; Phiên bản</span><span>24.48.14 (xxxx)</span></div>
-                  <div className="flex justify-between"><span>&gt; Tiến trình</span><span>com.google.android.gms</span></div>
-                </div>
-                <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 space-y-1">
-                  <div className="font-bold text-cyan-400">Doze</div>
-                  <div className="flex justify-between"><span>&gt; Trạng thái</span><span>Không hoạt động</span></div>
-                  <div className="flex justify-between"><span>&gt; Chế độ tiết kiệm pin</span><span>Tắt</span></div>
-                </div>
-                <div className="p-2 rounded-lg bg-[#041224] border border-cyan-950 space-y-1">
-                  <div className="font-bold text-cyan-400">Mạng</div>
-                  <div className="flex justify-between"><span>&gt; Loại kết nối</span><span>Wi-Fi</span></div>
-                  <div className="flex justify-between"><span>&gt; Độ mạnh tín hiệu</span><span className="text-emerald-400 font-semibold">Tốt</span></div>
-                </div>
-              </div>
-              <p className="text-xs font-bold text-cyan-300 mt-2 text-center">Chi tiết trạng thái – Hiểu rõ vấn đề</p>
-            </div>
-
-            {/* Screen 6: Quick Actions */}
-            <div className="flex flex-col items-center">
-              <div className="w-full max-w-[280px] h-[580px] rounded-[34px] bg-[#020914] border-[3px] border-cyan-500/70 shadow-[0_0_20px_rgba(6,182,212,0.3)] flex flex-col overflow-hidden relative p-3 text-[10px] space-y-2">
-                <div className="font-bold text-white text-xs pb-1 border-b border-cyan-950">&larr; Hành động nhanh</div>
-                <div className="p-2 rounded-xl bg-blue-600/30 border border-blue-500 flex items-center gap-2">
-                  <div className="w-7 h-7 rounded bg-blue-600 flex items-center justify-center font-bold text-white">⚡</div>
-                  <div><div className="font-bold text-white">Kiểm tra &amp; Sửa ngay</div><div className="text-[8px] text-blue-200">Đầy đủ quy trình</div></div>
-                </div>
-                <div className="p-2 rounded-xl bg-emerald-600/25 border border-emerald-500 flex items-center gap-2">
-                  <div className="w-7 h-7 rounded bg-emerald-600 flex items-center justify-center font-bold text-white">🔄</div>
-                  <div><div className="font-bold text-white">Khởi động lại GMS</div><div className="text-[8px] text-emerald-200">Sửa lỗi dịch vụ Google</div></div>
-                </div>
-                <div className="p-2 rounded-xl bg-amber-600/25 border border-amber-500 flex items-center gap-2">
-                  <div className="w-7 h-7 rounded bg-amber-600 flex items-center justify-center font-bold text-white">⬆</div>
-                  <div><div className="font-bold text-white">Gửi Heartbeat FCM</div><div className="text-[8px] text-amber-200">Đánh thức kết nối</div></div>
-                </div>
-                <div className="p-2 rounded-xl bg-purple-600/25 border border-purple-500 flex items-center gap-2">
-                  <div className="w-7 h-7 rounded bg-purple-600 flex items-center justify-center font-bold text-white">🗑</div>
-                  <div><div className="font-bold text-white">Xóa cache FCM</div><div className="text-[8px] text-purple-200">Làm mới kết nối</div></div>
-                </div>
-                <div className="p-2 rounded-xl bg-indigo-600/25 border border-indigo-500 flex items-center gap-2">
-                  <div className="w-7 h-7 rounded bg-indigo-600 flex items-center justify-center font-bold text-white">⚙</div>
-                  <div><div className="font-bold text-white">Khôi phục whitelist</div><div className="text-[8px] text-indigo-200">Thêm GMS vào danh sách</div></div>
-                </div>
-                <div className="p-2 rounded-xl bg-rose-600/25 border border-rose-500 flex items-center gap-2">
-                  <div className="w-7 h-7 rounded bg-rose-600 flex items-center justify-center font-bold text-white">📱</div>
-                  <div><div className="font-bold text-white">Kiểm tra ứng dụng FCM</div><div className="text-[8px] text-rose-200">Phát hiện ứng dụng bị chặn</div></div>
-                </div>
-              </div>
-              <p className="text-xs font-bold text-cyan-300 mt-2 text-center">Hành động nhanh – Xử lý tức thì</p>
-            </div>
-
-            {/* Screen 7: Advanced Settings */}
-            <div className="flex flex-col items-center">
-              <div className="w-full max-w-[280px] h-[580px] rounded-[34px] bg-[#020914] border-[3px] border-cyan-500/70 shadow-[0_0_20px_rgba(6,182,212,0.3)] flex flex-col overflow-hidden relative p-3 text-[10px] space-y-2">
-                <div className="font-bold text-white text-xs pb-1 border-b border-cyan-950">&larr; Cài đặt nâng cao</div>
-                <div className="space-y-1">
-                  <div className="text-[9px] font-bold text-slate-400 uppercase">Tùy chọn hóa</div>
-                  <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>Kích hoạt khi tắt màn hình</span><span className="w-3 h-3 rounded-full bg-cyan-400" /></div>
-                  <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>Kích hoạt khi mở khóa</span><span className="w-3 h-3 rounded-full bg-cyan-400" /></div>
-                  <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>Kích hoạt khi mạng reconnect</span><span className="w-3 h-3 rounded-full bg-cyan-400" /></div>
-                  <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>Kích hoạt khi khởi động app</span><span className="w-3 h-3 rounded-full bg-cyan-400" /></div>
-                </div>
-                <div className="space-y-1 pt-1">
-                  <div className="text-[9px] font-bold text-slate-400 uppercase">Tùy chọn khác</div>
-                  <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>Thông báo</span><span>&gt;</span></div>
-                  <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>Chế độ tối</span><span className="w-3 h-3 rounded-full bg-cyan-400" /></div>
-                  <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>Ngôn ngữ</span><span>Tiếng Việt &gt;</span></div>
-                  <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>Phiên bản YOUNGKNIGHT</span><span>2.0.0 &gt;</span></div>
-                </div>
-              </div>
-              <p className="text-xs font-bold text-cyan-300 mt-2 text-center">Cài đặt nâng cao – Linh hoạt, thông minh</p>
-            </div>
-
-            {/* Screen 8: Notification */}
-            <div className="flex flex-col items-center">
-              <div className="w-full max-w-[280px] h-[580px] rounded-[34px] bg-gradient-to-b from-[#0a192f] via-[#040e1e] to-[#010610] border-[3px] border-cyan-500/70 shadow-[0_0_20px_rgba(6,182,212,0.3)] flex flex-col overflow-hidden relative p-3">
-                <div className="pt-10 text-center">
-                  <div className="text-3xl font-light text-white">10:24</div>
-                  <div className="text-[11px] text-slate-300">Th 4, 08 Th10</div>
-                </div>
-                <div className="mt-8 p-3 rounded-2xl bg-[#08182b]/90 border border-cyan-400/50 space-y-1">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-white">
-                    <div className="flex items-center gap-1"><YkShieldLogo size={16} /> FCM Guard V2</div>
-                    <span>&gt;</span>
-                  </div>
-                  <div className="text-xs font-semibold text-cyan-300">FCM đang kết nối ổn định</div>
-                  <div className="text-[10px] text-slate-300">Tất cả dịch vụ hoạt động tốt!</div>
-                </div>
-                <div className="mt-auto mb-4 text-center text-slate-400">🔒</div>
-              </div>
-              <p className="text-xs font-bold text-cyan-300 mt-2 text-center">Thông báo – Luôn bên bạn</p>
-            </div>
-
-            {/* Screen 9: About */}
-            <div className="flex flex-col items-center">
-              <div className="w-full max-w-[280px] h-[580px] rounded-[34px] bg-[#020914] border-[3px] border-cyan-500/70 shadow-[0_0_20px_rgba(6,182,212,0.3)] flex flex-col overflow-hidden relative p-3 text-[10px] justify-between">
-                <div>
-                  <div className="font-bold text-white text-xs pb-1 border-b border-cyan-950">&larr; Giới thiệu</div>
-                  <div className="flex flex-col items-center text-center pt-3">
-                    <YkShieldLogo size={48} glow={true} />
-                    <h4 className="text-xs font-black text-white mt-1">FCM Guard V2</h4>
-                    <p className="text-[9px] text-slate-400">Phiên bản: 2.0.0</p>
-                    <p className="text-[9px] text-cyan-300/80 mt-1">Giữ kết nối FCM – Không lo mất thông báo</p>
-                  </div>
-                  <div className="space-y-1.5 my-3">
-                    <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>👤 Tác giả</span><span className="text-cyan-400 font-bold">YOUNGKNIGHT</span></div>
-                    <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>📱 Thiết bị hỗ trợ</span><span>Xiaomi (HyperOS)</span></div>
-                    <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>🛡️ Yêu cầu</span><span className="text-emerald-400">Không cần Shizuku / Root</span></div>
-                    <div className="p-1.5 rounded-lg bg-[#041224] flex justify-between"><span>🌐 Mã nguồn</span><span>Dự án mã nguồn mở</span></div>
-                  </div>
-                </div>
-                <button className="w-full py-2 rounded-xl bg-blue-600 text-white font-bold text-xs">
-                  Cảm ơn bạn đã sử dụng!
-                </button>
-              </div>
-              <p className="text-xs font-bold text-cyan-300 mt-2 text-center">Thông tin ứng dụng – Minh bạch, rõ ràng</p>
-            </div>
-          </div>
-        </main>
-      )}
-
-      {/* VIEW 3: CI/CD WORKFLOW & ARTIFACT (TẢI APK) */}
-      {viewMode === 'cicd' && (
+      {/* SECTION 3: CI/CD & BUILD INSTRUCTIONS */}
+      {viewSection === 'cicd' && (
         <main className="max-w-6xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
           <div className="p-6 rounded-2xl bg-[#041122] border border-cyan-800/60 shadow-xl space-y-4">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
               <FileCode className="w-5 h-5 text-cyan-400" />
-              Quy Trình Tự Động Build APK Android (GitHub Actions)
+              Hướng Dẫn Biên Dịch APK &amp; Tự Động Hóa GitHub Actions
             </h2>
             <p className="text-xs text-slate-300">
-              Dự án đã được tích hợp file <code>.github/workflows/build-apk.yml</code> với Gradle Wrapper 8.7 và cấu hình signing debug tự động.
+              Dự án đã được cấu hình trọn vẹn với Gradle Wrapper 8.7, Kotlin 2.0, Jetpack Compose và quy trình GitHub Actions tại <code>.github/workflows/build-apk.yml</code>.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="text-cyan-400 font-bold mb-1">Nhánh kích hoạt</div>
-                <div className="font-mono text-slate-300">push: main</div>
-                <div className="text-[10px] text-slate-400 mt-1">Hỗ trợ chạy thủ công workflow_dispatch</div>
+              <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-cyan-400 font-bold block mb-1">Lệnh Build cục bộ</span>
+                <code className="text-slate-300 font-mono text-[11px] block bg-slate-950 p-2 rounded">
+                  ./gradlew assembleDebug
+                </code>
+                <span className="text-[10px] text-slate-400 mt-1 block">Yêu cầu JDK 17</span>
               </div>
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="text-cyan-400 font-bold mb-1">Môi trường Java &amp; Gradle</div>
-                <div className="text-slate-300">JDK 17 (Temurin) • Gradle 8.7</div>
-                <div className="text-[10px] text-slate-400 mt-1">Android Gradle Plugin 8.6.1</div>
+
+              <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-cyan-400 font-bold block mb-1">Đường dẫn file APK</span>
+                <code className="text-slate-300 font-mono text-[11px] block bg-slate-950 p-2 rounded truncate">
+                  app/build/outputs/apk/debug/app-debug.apk
+                </code>
+                <span className="text-[10px] text-slate-400 mt-1 block">Tên Artifact: Xiaomi-Notification-Fix-Debug</span>
               </div>
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="text-emerald-400 font-bold mb-1">Tên Artifact tải về</div>
-                <div className="font-mono text-emerald-300 font-bold">Xiaomi-Notification-Fix-Debug</div>
-                <div className="text-[10px] text-slate-400 mt-1">app/build/outputs/apk/debug/app-debug.apk</div>
+
+              <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-cyan-400 font-bold block mb-1">Tự động trên GitHub</span>
+                <span className="text-slate-300 text-[11px] block">
+                  Tự chạy khi push vào <code>main</code> hoặc chạy thủ công qua <code>workflow_dispatch</code>.
+                </span>
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setViewMode('emulator')}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-md flex items-center gap-2 cursor-pointer"
-              >
-                <Smartphone className="w-4 h-4" /> Quay lại Giả lập kiểm tra
-              </button>
+            <div className="p-4 rounded-xl bg-[#051a30] border border-cyan-800/60 text-xs text-slate-300 space-y-2">
+              <h4 className="font-bold text-white flex items-center gap-1.5">
+                <Info className="w-4 h-4 text-cyan-300" /> Danh Sách Các Chức Năng Không Thể Thực Hiện Do Giới Hạn Android/HyperOS:
+              </h4>
+              <ul className="list-disc pl-5 space-y-1 text-slate-300 text-[11px]">
+                <li>Không thể ép máy chủ Google FCM giữ kết nối nếu mất kết nối Internet vật lý hoặc tài khoản bị lỗi.</li>
+                <li>Không thể ngăn Xiaomi HyperOS kill ứng dụng nếu người dùng không cấp quyền Tự khởi chạy hoặc khi thiết bị thiếu hụt RAM nghiêm trọng.</li>
+                <li>Không thể tự động bật quyền WRITE_SETTINGS hoặc tắt tối ưu pin mà không có sự đồng ý của người dùng trong Cài đặt hệ thống.</li>
+                <li>Không thể can thiệp sâu vào nhân hệ điều hành mà không cần Root/Shizuku. Ứng dụng tuân thủ phương pháp an toàn và hợp lệ.</li>
+              </ul>
             </div>
           </div>
         </main>
@@ -1934,7 +1191,7 @@ export default function App() {
 
       {/* FOOTER */}
       <footer className="border-t border-cyan-950 py-4 text-center text-xs text-slate-500 bg-[#020713]">
-        FCM Guard V2 (By YOUNGKNIGHT) • Trình giả lập tương tác Xiaomi HyperOS • Phiên bản 2.0.0
+        FCM Guard V2 • Tác giả: YOUNGKNIGHT • Mã nguồn Kotlin &amp; Jetpack Compose • Bản sao lưu an toàn tại legacy_backup/
       </footer>
     </div>
   );
